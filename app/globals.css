@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background-color: #f6f7f9;
+  color: #1c1f26;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-primary {
+  @apply bg-navy text-white font-semibold rounded-xl h-12 flex items-center justify-center active:opacity-80 transition disabled:opacity-40 disabled:pointer-events-none;
+}
+
+.btn-secondary {
+  @apply bg-white text-navy font-semibold rounded-xl h-12 flex items-center justify-center border border-gray-200 active:opacity-70 transition;
+}
+
+.card {
+  @apply bg-card rounded-2xl border border-gray-100 shadow-subtle;
+}
+
+.page-container {
+  @apply max-w-md mx-auto md:max-w-2xl w-full;
+}
