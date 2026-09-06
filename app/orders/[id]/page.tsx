@@ -135,7 +135,7 @@ export default function OrderDetailsPage() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 40;
-      const headerHeight = 50;
+      const headerHeight = 60;
       const usableWidth = pageWidth - margin * 2;
       const usableHeight = pageHeight - margin * 2 - headerHeight;
       
@@ -147,18 +147,31 @@ export default function OrderDetailsPage() {
       const imgHeight = (img.height / img.width) * usableWidth;
       
       // Helper function to add header to a page
-      const addHeader = (pageNum: number) => {
+      const addHeader = () => {
+        // Draw a subtle line under the header
+        pdf.setDrawColor(229, 231, 235); // light gray
+        pdf.line(margin, margin + headerHeight - 10, pageWidth - margin, margin + headerHeight - 10);
+        
+        // Add order title (left)
         pdf.setFontSize(12);
         pdf.setFont(undefined, "bold");
+        pdf.setTextColor(15, 35, 64); // navy color
         pdf.text(orderTitle, margin, margin + 15);
+        
+        // Add order date (right)
         pdf.setFontSize(10);
         pdf.setFont(undefined, "normal");
-        pdf.text(orderDate, pageWidth - margin - 60, margin + 15);
+        pdf.setTextColor(107, 114, 128); // gray color
+        const dateWidth = pdf.getTextWidth(orderDate);
+        pdf.text(orderDate, pageWidth - margin - dateWidth, margin + 15);
+        
+        // Reset text color
+        pdf.setTextColor(0, 0, 0);
       };
       
       // If content fits on one page, use the original logic
       if (imgHeight <= usableHeight) {
-        addHeader(1);
+        addHeader();
         pdf.addImage(dataUrl, "PNG", margin, margin + headerHeight, usableWidth, imgHeight);
       } else {
         // Content spans multiple pages - split the image
@@ -178,11 +191,12 @@ export default function OrderDetailsPage() {
           }
           
           // Add header to each page
-          addHeader(pageNumber + 1);
+          addHeader();
           
           // Calculate how much of the image fits on this page
+          // Subtract a small buffer (10px) to prevent cutting content at boundaries
           const pixelHeight = Math.min(
-            (usableHeight / imgHeight) * img.height,
+            ((usableHeight - 10) / imgHeight) * img.height,
             img.height - yOffset
           );
           
@@ -216,7 +230,8 @@ export default function OrderDetailsPage() {
       
       pdf.save(`order-${String(order.orderNumber).padStart(3, "0")}.pdf`);
       showToast("✓ PDF generated");
-    } catch {
+    } catch (error) {
+      console.error("PDF generation error:", error);
       showToast("Something went wrong generating the PDF.");
     } finally {
       setBusy("");
