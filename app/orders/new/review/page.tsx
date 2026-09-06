@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getDraft, setDraft, clearDraft } from "@/lib/orderDraft";
 import OrderDocument from "@/components/OrderDocument";
+import { useOrderExport } from "@/lib/useOrderExport";
 
 type Product = { id: string; name: string };
 
@@ -14,11 +15,6 @@ export default function ReviewOrderPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-
-  // preview/export state
-  const docRef = useRef<HTMLDivElement | null>(null);
-  const [busy, setBusy] = useState<"" | "image" | "pdf" | "share">("");
-  const [toast, setToast] = useState("");
 
   useEffect(() => {
     const ids = getDraft();
@@ -73,104 +69,14 @@ export default function ReviewOrderPage() {
     }
   }
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2200);
-  }
-
-  async function renderPng(): Promise<Blob | null> {
-    if (!docRef.current) return null;
-    const { toBlob } = await import("html-to-image");
-    return toBlob(docRef.current, { pixelRatio: 3, backgroundColor: "#ffffff" });
-  }
-
-  async function handleSaveImage() {
-    if (items.length === 0) return;
-    setBusy("image");
-    try {
-      const blob = await renderPng();
-      if (!blob) throw new Error("no blob");
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      a.download = `order-preview-${timestamp}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast("✓ Image saved");
-    } catch {
-      showToast("Something went wrong generating the image.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function handleShare() {
-    if (items.length === 0) return;
-    setBusy("share");
-    try {
-      const blob = await renderPng();
-      if (!blob) throw new Error("no blob");
-      const file = new File(
-        [blob],
-        `order-preview-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`,
-        { type: "image/png" }
-      );
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: `Order preview` });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = file.name;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast("Sharing isn't supported here — image downloaded instead.");
-      }
-    } catch {
-      // user cancelled share sheet, or share failed — no error needed
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function handleGeneratePdf() {
-    if (items.length === 0) return;
-    setBusy("pdf");
-    try {
-      const blob = await renderPng();
-      if (!blob) throw new Error("no blob");
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-
-      const { jsPDF } = await import("jspdf");
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = dataUrl;
-      });
-
-      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const margin = 40;
-      const usableWidth = pageWidth - margin * 2;
-      const imgHeight = (img.height / img.width) * usableWidth;
-
-      pdf.addImage(dataUrl, "PNG", margin, margin, usableWidth, imgHeight);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      pdf.save(`order-preview-${timestamp}.pdf`);
-      showToast("✓ PDF generated");
-    } catch {
-      showToast("Something went wrong generating the PDF.");
-    } finally {
-      setBusy("");
-    }
-  }
+  const previewItems = items.map((p) => ({ id: p.id, product: { name: p.name } }));
+  const { pages, hiddenPages, saveImages, share, generatePdf, busy, toast } =
+    useOrderExport({
+      orderNumber: 0,
+      createdAt: new Date().toISOString(),
+      items: previewItems,
+      filenameBase: "order-preview",
+    });
 
   return (
     <div className="pb-28">
@@ -247,30 +153,57 @@ export default function ReviewOrderPage() {
           </div>
 
           {/* Preview + Export column */}
-          <div className=""> 
+          <div className="">
+            {hiddenPages}
+
             <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-subtle p-6 mb-4 bg-white">
               <div className="text-sm font-semibold mb-3">Preview</div>
-              <div className="flex justify-center overflow-x-auto">
-                <div className="scale-[0.78] origin-top -mb-16 sm:scale-100 sm:mb-0">
-                  <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-subtle">
-                    <OrderDocument
-                      ref={docRef}
-                      orderNumber={0}
-                      createdAt={new Date().toISOString()}
-                      items={items.map((p) => ({ id: p.id, product: { name: p.name } }))}
-                    />
-                  </div>
-                </div>
+
+              <div className="flex flex-col items-center gap-4">
+                {pages.map((pageItems, i) => {
+                  const startIndex = pages
+                    .slice(0, i)
+                    .reduce((sum, p) => sum + p.length, 0);
+                  return (
+                    <div key={i} className="w-full flex flex-col items-center">
+                      {pages.length > 1 && (
+                        <div className="text-xs font-semibold text-muted mb-2">
+                          Page {i + 1} of {pages.length}
+                        </div>
+                      )}
+                      <div className="overflow-x-auto max-w-full">
+                        <div className="scale-[0.78] origin-top -mb-16 sm:scale-100 sm:mb-0">
+                          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-subtle">
+                            <OrderDocument
+                              orderNumber={0}
+                              createdAt={new Date().toISOString()}
+                              items={pageItems}
+                              startIndex={startIndex}
+                              totalCount={items.length}
+                              pageNumber={i + 1}
+                              totalPages={pages.length}
+                              showFooter={i === pages.length - 1}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex flex-col gap-2.5 mt-4">
-                <button onClick={handleSaveImage} disabled={busy !== ""} className="btn-primary w-full">
-                  {busy === "image" ? "Preparing preview..." : "Save Image"}
+                <button onClick={saveImages} disabled={busy !== ""} className="btn-primary w-full">
+                  {busy === "image"
+                    ? "Preparing preview..."
+                    : pages.length > 1
+                    ? `Save ${pages.length} Images`
+                    : "Save Image"}
                 </button>
-                <button onClick={handleShare} disabled={busy !== ""} className="btn-secondary w-full">
+                <button onClick={share} disabled={busy !== ""} className="btn-secondary w-full">
                   {busy === "share" ? "Preparing..." : "Share"}
                 </button>
-                <button onClick={handleGeneratePdf} disabled={busy !== ""} className="btn-secondary w-full">
+                <button onClick={generatePdf} disabled={busy !== ""} className="btn-secondary w-full">
                   {busy === "pdf" ? "Generating..." : "Generate PDF"}
                 </button>
               </div>

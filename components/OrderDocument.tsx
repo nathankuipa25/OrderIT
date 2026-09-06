@@ -19,120 +19,166 @@ function formatTime(iso: string) {
   });
 }
 
-const OrderDocument = forwardRef<
-  HTMLDivElement,
-  { orderNumber: number; createdAt: string; items: Item[]; title?: string }
->(function OrderDocument({ orderNumber, createdAt, items, title = "CHINAKANAKA ORDER" }, ref) {
-  return (
-    <div
-      ref={ref}
-      style={{
-        width: 480,
-        background: "#ffffff",
-        fontFamily:
-          "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        color: "#1c1f26",
-        padding: "40px 36px",
-        boxSizing: "border-box",
-      }}
-    >
-      <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <div
-          style={{
-            fontSize: 22,
-            fontWeight: 800,
-            letterSpacing: 1,
-            color: "#0f2340",
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            letterSpacing: 3,
-            color: "#0f9d9d",
-            marginTop: 4,
-          }}
-        >
-          -
-        </div>
-      </div>
+type OrderDocumentProps = {
+  orderNumber: number;
+  createdAt: string;
+  items: Item[];
+  title?: string;
+  /** Global index of this page's first item, for continuous numbering across pages. */
+  startIndex?: number;
+  /** Total product count across ALL pages (footer shows this, not just this page's count). */
+  totalCount?: number;
+  pageNumber?: number;
+  totalPages?: number;
+  /** Only the last page shows the total-count footer + brand mark. */
+  showFooter?: boolean;
+};
 
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5 }}>
-          {formatDate(createdAt)}
-        </div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-          {formatTime(createdAt)}
-        </div>
-      </div>
+const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
+  function OrderDocument(
+    {
+      orderNumber,
+      createdAt,
+      items,
+      title = "CHINAKANAKA ORDER",
+      startIndex = 0,
+      totalCount,
+      pageNumber = 1,
+      totalPages = 1,
+      showFooter = true,
+    },
+    ref
+  ) {
+    const isMultiPage = totalPages > 1;
+    const resolvedTotalCount = totalCount ?? items.length;
 
+    return (
       <div
+        ref={ref}
         style={{
-          borderTop: "1px solid #e5e7eb",
-          borderBottom: "1px solid #e5e7eb",
-          padding: "18px 0",
-          marginBottom: 20,
+          width: 480,
+          background: "#ffffff",
+          fontFamily:
+            "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          color: "#1c1f26",
+          padding: "40px 36px",
+          boxSizing: "border-box",
         }}
       >
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 2,
-            color: "#6b7280",
-            marginBottom: 12,
-          }}
-        >
-          PRODUCTS
-        </div>
-        {items.map((item, idx) => (
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div
-            key={item.id}
             style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 12,
-              padding: "7px 0",
-              fontSize: 15,
+              fontSize: 22,
+              fontWeight: 800,
+              letterSpacing: 1,
+              color: "#0f2340",
             }}
           >
-            <span
+            {title}
+          </div>
+        </div>
+
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5 }}>
+            {formatDate(createdAt)}
+          </div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+            {formatTime(createdAt)} · Order #{String(orderNumber).padStart(3, "0")}
+          </div>
+          {isMultiPage && (
+            <div
               style={{
-                color: "#9ca3af",
-                fontWeight: 600,
-                fontSize: 13,
-                width: 22,
-                flexShrink: 0,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                color: "#0f9d9d",
+                marginTop: 8,
               }}
             >
-              {String(idx + 1).padStart(2, "0")}
-            </span>
-            <span style={{ fontWeight: 500 }}>{item.product.name}</span>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>
-          {items.length} PRODUCT{items.length === 1 ? "" : "S"}
+              PAGE {pageNumber} OF {totalPages}
+            </div>
+          )}
         </div>
+
         <div
           style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 2,
-            color: "#0f2340",
-            marginTop: 18,
+            borderTop: "1px solid #e5e7eb",
+            borderBottom: "1px solid #e5e7eb",
+            padding: "18px 0",
+            marginBottom: 20,
           }}
         >
-          ORDERIT
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: "#6b7280",
+              marginBottom: 12,
+            }}
+          >
+            PRODUCTS
+          </div>
+          {items.map((item, idx) => (
+            <div
+              key={item.id}
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 12,
+                padding: "7px 0",
+                fontSize: 15,
+              }}
+            >
+              <span
+                style={{
+                  color: "#9ca3af",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  width: 22,
+                  flexShrink: 0,
+                }}
+              >
+                {String(startIndex + idx + 1).padStart(2, "0")}
+              </span>
+              <span style={{ fontWeight: 500 }}>{item.product.name}</span>
+            </div>
+          ))}
         </div>
+
+        {showFooter ? (
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>
+              {resolvedTotalCount} PRODUCT{resolvedTotalCount === 1 ? "" : "S"}
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 2,
+                color: "#0f2340",
+                marginTop: 18,
+              }}
+            >
+              ORDERIT
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              textAlign: "center",
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#9ca3af",
+              letterSpacing: 1,
+            }}
+          >
+            CONTINUED ON NEXT PAGE →
+          </div>
+        )}
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 export default OrderDocument;
