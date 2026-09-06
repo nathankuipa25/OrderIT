@@ -39,6 +39,14 @@ export default function OrderDetailsPage() {
     setTimeout(() => setToast(""), 2200);
   }
 
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
   async function renderPng(): Promise<Blob | null> {
     if (!docRef.current) return null;
     const { toBlob } = await import("html-to-image");
@@ -127,15 +135,31 @@ export default function OrderDetailsPage() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 40;
+      const headerHeight = 50;
       const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
+      const usableHeight = pageHeight - margin * 2 - headerHeight;
+      
+      // Format header text
+      const orderTitle = `Order #${String(order.orderNumber).padStart(3, "0")}`;
+      const orderDate = formatDate(order.createdAt);
       
       // Calculate image dimensions
       const imgHeight = (img.height / img.width) * usableWidth;
       
+      // Helper function to add header to a page
+      const addHeader = (pageNum: number) => {
+        pdf.setFontSize(12);
+        pdf.setFont(undefined, "bold");
+        pdf.text(orderTitle, margin, margin + 15);
+        pdf.setFontSize(10);
+        pdf.setFont(undefined, "normal");
+        pdf.text(orderDate, pageWidth - margin - 60, margin + 15);
+      };
+      
       // If content fits on one page, use the original logic
       if (imgHeight <= usableHeight) {
-        pdf.addImage(dataUrl, "PNG", margin, margin, usableWidth, imgHeight);
+        addHeader(1);
+        pdf.addImage(dataUrl, "PNG", margin, margin + headerHeight, usableWidth, imgHeight);
       } else {
         // Content spans multiple pages - split the image
         const canvas = document.createElement("canvas");
@@ -152,6 +176,9 @@ export default function OrderDetailsPage() {
           if (pageNumber > 0) {
             pdf.addPage();
           }
+          
+          // Add header to each page
+          addHeader(pageNumber + 1);
           
           // Calculate how much of the image fits on this page
           const pixelHeight = Math.min(
@@ -180,7 +207,7 @@ export default function OrderDetailsPage() {
           // Add this page to the PDF
           const pageDataUrl = pageCanvas.toDataURL("image/png");
           const pageImgHeight = (pixelHeight / img.width) * usableWidth;
-          pdf.addImage(pageDataUrl, "PNG", margin, margin, usableWidth, pageImgHeight);
+          pdf.addImage(pageDataUrl, "PNG", margin, margin + headerHeight, usableWidth, pageImgHeight);
           
           yOffset += pixelHeight;
           pageNumber++;
