@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Please log in." }, { status: 401 });
+  }
+
   const limitParam = req.nextUrl.searchParams.get("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+  const isAdmin = session.role === "ADMIN";
 
   try {
     const orders = await prisma.order.findMany({
+      where: isAdmin ? undefined : { userId: session.sub },
       orderBy: { createdAt: "desc" },
       take: limit,
-      include: { items: { include: { product: true } } },
+      include: {
+        items: { include: { product: true } },
+        ...(isAdmin ? { user: { select: { name: true } } } : {}),
+      },
     });
     return NextResponse.json({ orders });
   } catch (err) {
@@ -23,6 +34,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Please log in." }, { status: 401 });
+  }
+  if (session.role !== "SHOP") {
+    return NextResponse.json(
+      { error: "Only shop accounts can create orders." },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await req.json();
     const productIds: string[] = Array.isArray(body?.productIds)
@@ -56,6 +78,7 @@ export async function POST(req: NextRequest) {
       return tx.order.create({
         data: {
           orderNumber: nextNumber,
+          userId: session.sub,
           items: {
             create: productIds.map((productId) => ({ productId })),
           },

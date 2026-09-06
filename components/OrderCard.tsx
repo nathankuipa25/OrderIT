@@ -18,11 +18,13 @@ export default function OrderCard({
   orderNumber,
   itemCount,
   createdAt,
+  shopName,
 }: {
   id: string;
   orderNumber: number;
   itemCount: number;
   createdAt: string;
+  shopName?: string | null;
 }) {
   return (
     <Link
@@ -33,6 +35,11 @@ export default function OrderCard({
         <div className="font-semibold text-ink">
           Order #{String(orderNumber).padStart(3, "0")}
         </div>
+        {shopName && (
+          <div className="text-xs font-medium text-accent mt-0.5">
+            {shopName}
+          </div>
+        )}
         <div className="text-sm text-muted mt-0.5">
           {itemCount} product{itemCount === 1 ? "" : "s"}
         </div>

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Please log in." }, { status: 401 });
+  }
+
   const activeOnly = req.nextUrl.searchParams.get("active") === "true";
   try {
     const products = await prisma.product.findMany({
@@ -19,6 +25,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session || session.role !== "ADMIN") {
+    return NextResponse.json({ error: "Admins only." }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const name = String(body?.name || "").trim();

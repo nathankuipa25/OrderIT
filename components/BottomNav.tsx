@@ -3,19 +3,31 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Home", icon: HomeIcon },
-  { href: "/orders", label: "Orders", icon: OrdersIcon },
-  { href: "/products", label: "Products", icon: ProductsIcon },
-];
+type Role = "ADMIN" | "SHOP";
+
+function getNavItems(role?: Role) {
+  const items = [
+    { href: "/", label: "Home", icon: HomeIcon },
+    { href: "/orders", label: "Orders", icon: OrdersIcon },
+  ];
+  if (role === "ADMIN") {
+    items.push({ href: "/products", label: "Products", icon: ProductsIcon });
+  }
+  return items;
+}
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname.startsWith(href);
 }
 
-export default function BottomNav() {
+export default function BottomNav({ role }: { role?: Role }) {
   const pathname = usePathname();
+
+  // No session (login/register pages) — no nav to show.
+  if (!role) return null;
+
+  const NAV_ITEMS = getNavItems(role);
 
   return (
     <>

@@ -15,6 +15,14 @@ export default function ReviewOrderPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [shopName, setShopName] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => setShopName(data?.user?.name))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const ids = getDraft();
@@ -75,6 +83,7 @@ export default function ReviewOrderPage() {
       orderNumber: 0,
       createdAt: new Date().toISOString(),
       items: previewItems,
+      title: shopName,
       filenameBase: "order-preview",
     });
 
@@ -178,6 +187,7 @@ export default function ReviewOrderPage() {
                               orderNumber={0}
                               createdAt={new Date().toISOString()}
                               items={pageItems}
+                              title={shopName}
                               startIndex={startIndex}
                               totalCount={items.length}
                               pageNumber={i + 1}

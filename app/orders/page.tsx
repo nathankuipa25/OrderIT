@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
 import OrderCard from "@/components/OrderCard";
 import EmptyState from "@/components/EmptyState";
 
@@ -10,6 +12,7 @@ type OrderWithCount = {
   orderNumber: number;
   createdAt: Date;
   _count: { items: number };
+  user?: { name: string } | null;
 };
 
 function groupByDate(orders: OrderWithCount[]) {
@@ -27,9 +30,18 @@ function groupByDate(orders: OrderWithCount[]) {
 }
 
 export default async function OrdersPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+
+  const isAdmin = session.role === "ADMIN";
+
   const orders: OrderWithCount[] = await prisma.order.findMany({
+    where: isAdmin ? undefined : { userId: session.sub },
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { items: true } } },
+    include: {
+      _count: { select: { items: true } },
+      ...(isAdmin ? { user: { select: { name: true } } } : {}),
+    },
   });
 
   const grouped = groupByDate(orders);
@@ -38,17 +50,25 @@ export default async function OrdersPage() {
   return (
     <div>
       <header className="py-2 mb-6">
-        <div className="text-2xl font-bold text-navy">Orders</div>
+        <div className="text-2xl font-bold text-navy">
+          {isAdmin ? "All Orders" : "Orders"}
+        </div>
       </header>
 
       {orders.length === 0 ? (
         <EmptyState
           title="No orders yet"
-          description="Create an order by selecting the products you need."
+          description={
+            isAdmin
+              ? "Orders created by shops will appear here."
+              : "Create an order by selecting the products you need."
+          }
           action={
-            <Link href="/orders/new" className="btn-primary w-full">
-              Create Order
-            </Link>
+            !isAdmin && (
+              <Link href="/orders/new" className="btn-primary w-full">
+                Create Order
+              </Link>
+            )
           }
         />
       ) : (
@@ -66,6 +86,7 @@ export default async function OrdersPage() {
                     orderNumber={order.orderNumber}
                     itemCount={order._count.items}
                     createdAt={order.createdAt.toISOString()}
+                    shopName={isAdmin ? order.user?.name : undefined}
                   />
                 ))}
               </div>

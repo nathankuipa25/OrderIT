@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Please log in." }, { status: 401 });
+  }
+
   try {
     const product = await prisma.product.findUnique({
       where: { id: params.id },
@@ -26,6 +32,11 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const session = await getSession();
+  if (!session || session.role !== "ADMIN") {
+    return NextResponse.json({ error: "Admins only." }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const data: { name?: string; active?: boolean } = {};

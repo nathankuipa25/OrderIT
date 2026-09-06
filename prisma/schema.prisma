@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  ADMIN
+  SHOP
+}
+
+model User {
+  id           String   @id @default(cuid())
+  role         Role
+  // Display name. For SHOP accounts this is what appears as the order
+  // header (e.g. "HenkTrust Chinakanaka"). For ADMIN it's just their name.
+  name         String
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  orders       Order[]
+}
+
 model Product {
   id        String      @id @default(cuid())
   name      String      @unique
@@ -21,6 +38,13 @@ model Order {
   orderNumber Int         @unique
   createdAt   DateTime    @default(now())
   items       OrderItem[]
+
+  // Optional so pre-existing orders (created before accounts existed)
+  // don't break when this column is added to a live database.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model OrderItem {

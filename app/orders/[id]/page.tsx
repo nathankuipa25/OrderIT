@@ -12,6 +12,7 @@ type OrderData = {
   orderNumber: number;
   createdAt: string;
   items: Item[];
+  user?: { name: string } | null;
 };
 
 export default function OrderDetailsPage() {
@@ -37,6 +38,7 @@ export default function OrderDetailsPage() {
       orderNumber: order?.orderNumber ?? 0,
       createdAt: order?.createdAt ?? new Date().toISOString(),
       items: order?.items ?? [],
+      title: order?.user?.name,
     });
 
   if (error) {
@@ -100,6 +102,7 @@ export default function OrderDetailsPage() {
                           orderNumber={order.orderNumber}
                           createdAt={order.createdAt}
                           items={pageItems}
+                          title={order.user?.name}
                           startIndex={startIndex}
                           totalCount={order.items.length}
                           pageNumber={i + 1}
