@@ -47,7 +47,7 @@ export default function CreateOrderPage() {
   }
 
   return (
-    <div className="pb-24">
+    <div className="pb-40 md:pb-24">
       <header className="flex items-center gap-3 py-2 mb-4">
         <Link
           href="/"
@@ -125,8 +125,8 @@ export default function CreateOrderPage() {
       )}
 
       {selected.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 md:pl-56">
-          <div className="page-container px-4 py-3">
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 md:pl-56">
+          <div className="page-container px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] mb-16 md:mb-0">
             <div className="text-sm text-muted mb-2 text-center">
               {selected.size} product{selected.size === 1 ? "" : "s"} selected
             </div>
