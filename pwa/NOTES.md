@@ -1,21 +1,38 @@
-PWA notes and TWA instructions
+PWA and TWA updates
 
-Files added/updated:
-- public/manifest.webmanifest (now includes PNG data-URI placeholders for 192 & 512 icons and retains SVG as fallback)
-- app/components/InstallButton.tsx (in-page install CTA using beforeinstallprompt)
-- app/layout.tsx updated to render InstallButton
-- public/service-worker.js updated to include icons in precache
+I added the following changes for full PWA/TWA support and automated checks:
 
-What I generated for you:
-- Tiny PNG placeholders are embedded as data URIs in manifest.webmanifest (1x1 transparent PNG). Replace them with real PNG assets for best results.
+1) PNG placeholders
+- public/icons/icon-192.png
+- public/icons/icon-512.png
 
-Next steps (recommended)
-1) Replace the data-URI placeholders in public/manifest.webmanifest with real PNG files hosted at /icons (192x192 and 512x512 maskable) and update the src values to point to the files.
-2) Ensure your site is served over HTTPS and deployed (Vercel, Netlify, etc.).
-3) Verify installability via Lighthouse and test on Android Chrome. When beforeinstallprompt fires, the Install button will appear.
+NOTE: These are tiny placeholder files. Replace them with real 192x192 and 512x512 maskable PNGs for proper installability.
 
-If you want, I can now:
-- Generate real PNG placeholders (192x192 and 512x512) and add them to public/icons as binary files (I can encode them here), or
-- Integrate next-pwa for automated Workbox precaching.
+2) next-pwa integration
+- next.config.mjs updated to use next-pwa. You MUST install the dependency before building:
 
-Reply which follow-up you prefer.
+  npm install next-pwa
+
+This will generate the Workbox precache into /public during production builds. Configuration disables PWA in non-production to avoid SW issues during development.
+
+3) GitHub Actions Lighthouse check
+- .github/workflows/lighthouse.yml runs on pushes and PRs to main. It:
+  - installs deps
+  - builds the app
+  - starts the production server (npm run start)
+  - runs Lighthouse against http://localhost:3000
+  - uploads the HTML report as an artifact
+
+Important notes & next steps
+- Install next-pwa as noted above.
+- Replace the PNG placeholders with actual app icons (192 & 512) and a maskable PNG for best Android support.
+- Ensure your start script in package.json serves the production build on port 3000 (Next's default). Example package.json scripts:
+  "build": "next build",
+  "start": "next start -p 3000"
+
+- On hosting platforms (Vercel) you may prefer to disable next-pwa and use a separate Workbox build — next-pwa works with Vercel but ensure you test.
+
+If you want, I can:
+- Commit optimized real PNG placeholders I can generate for you.
+- Add an alternate Lighthouse workflow that runs against a deployed preview URL (requires deployment step).
+- Add Bubblewrap config or sample Android project for TWA packaging.
