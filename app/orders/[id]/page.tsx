@@ -135,7 +135,7 @@ export default function OrderDetailsPage() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 40;
-      const headerHeight = 60;
+      const headerHeight = 50;
       const usableWidth = pageWidth - margin * 2;
       const usableHeight = pageHeight - margin * 2 - headerHeight;
       
@@ -148,25 +148,24 @@ export default function OrderDetailsPage() {
       
       // Helper function to add header to a page
       const addHeader = () => {
-        // Draw a subtle line under the header
-        pdf.setDrawColor(229, 231, 235); // light gray
-        pdf.line(margin, margin + headerHeight - 10, pageWidth - margin, margin + headerHeight - 10);
-        
-        // Add order title (left)
-        pdf.setFontSize(12);
-        pdf.setFont(undefined, "bold");
-        pdf.setTextColor(15, 35, 64); // navy color
-        pdf.text(orderTitle, margin, margin + 15);
-        
-        // Add order date (right)
-        pdf.setFontSize(10);
-        pdf.setFont(undefined, "normal");
-        pdf.setTextColor(107, 114, 128); // gray color
-        const dateWidth = pdf.getTextWidth(orderDate);
-        pdf.text(orderDate, pageWidth - margin - dateWidth, margin + 15);
-        
-        // Reset text color
-        pdf.setTextColor(0, 0, 0);
+        try {
+          // Add order title (left)
+          pdf.setFontSize(12);
+          pdf.setFont(undefined, "bold");
+          pdf.setTextColor(15, 35, 64); // navy color
+          pdf.text(orderTitle, margin, margin + 12);
+          
+          // Add order date (right)
+          pdf.setFontSize(10);
+          pdf.setFont(undefined, "normal");
+          pdf.setTextColor(107, 114, 128); // gray color
+          pdf.text(orderDate, pageWidth - margin - 80, margin + 12);
+          
+          // Reset text color to black
+          pdf.setTextColor(0, 0, 0);
+        } catch (e) {
+          console.error("Error adding header:", e);
+        }
       };
       
       // If content fits on one page, use the original logic
@@ -194,9 +193,9 @@ export default function OrderDetailsPage() {
           addHeader();
           
           // Calculate how much of the image fits on this page
-          // Subtract a small buffer (10px) to prevent cutting content at boundaries
+          // Subtract a small buffer to prevent cutting content at boundaries
           const pixelHeight = Math.min(
-            ((usableHeight - 10) / imgHeight) * img.height,
+            ((usableHeight - 5) / imgHeight) * img.height,
             img.height - yOffset
           );
           
