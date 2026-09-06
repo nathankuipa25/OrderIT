@@ -21,8 +21,8 @@ function formatTime(iso: string) {
 
 const OrderDocument = forwardRef<
   HTMLDivElement,
-  { orderNumber: number; createdAt: string; items: Item[] }
->(function OrderDocument({ orderNumber, createdAt, items }, ref) {
+  { orderNumber: number; createdAt: string; items: Item[]; title?: string }
+>(function OrderDocument({ orderNumber, createdAt, items, title = "CHINAKANAKA ORDER" }, ref) {
   return (
     <div
       ref={ref}
@@ -45,7 +45,7 @@ const OrderDocument = forwardRef<
             color: "#0f2340",
           }}
         >
-          CHINAKANAKA ORDER
+          {title}
         </div>
         <div
           style={{
