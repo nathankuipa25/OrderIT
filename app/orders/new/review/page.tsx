@@ -180,21 +180,20 @@ export default function ReviewOrderPage() {
                           Page {i + 1} of {pages.length}
                         </div>
                       )}
-                      <div className="overflow-x-auto max-w-full">
-                        <div className="scale-[0.78] origin-top -mb-16 sm:scale-100 sm:mb-0">
-                          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-subtle">
-                            <OrderDocument
-                              orderNumber={0}
-                              createdAt={new Date().toISOString()}
-                              items={pageItems}
-                              title={shopName}
-                              startIndex={startIndex}
-                              totalCount={items.length}
-                              pageNumber={i + 1}
-                              totalPages={pages.length}
-                              showFooter={i === pages.length - 1}
-                            />
-                          </div>
+                      <div className="w-full flex justify-center">
+                        <div className="w-full max-w-[480px] rounded-2xl overflow-hidden border border-gray-100 shadow-subtle">
+                          <OrderDocument
+                            orderNumber={0}
+                            createdAt={new Date().toISOString()}
+                            items={pageItems}
+                            title={shopName}
+                            startIndex={startIndex}
+                            totalCount={items.length}
+                            pageNumber={i + 1}
+                            totalPages={pages.length}
+                            showFooter={i === pages.length - 1}
+                            fluid
+                          />
                         </div>
                       </div>
                     </div>

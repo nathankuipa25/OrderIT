@@ -32,6 +32,14 @@ type OrderDocumentProps = {
   totalPages?: number;
   /** Only the last page shows the total-count footer + brand mark. */
   showFooter?: boolean;
+  /**
+   * When true, the document fills its container (width: 100%, capped at
+   * 480px) instead of forcing a fixed 480px box. Use this for on-screen
+   * previews so they never overflow a narrow phone screen. Leave false
+   * (default) for the hidden nodes used to actually capture the image/PDF —
+   * those need a fixed, known width for consistent output.
+   */
+  fluid?: boolean;
 };
 
 const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
@@ -46,6 +54,7 @@ const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
       pageNumber = 1,
       totalPages = 1,
       showFooter = true,
+      fluid = false,
     },
     ref
   ) {
@@ -56,7 +65,8 @@ const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
       <div
         ref={ref}
         style={{
-          width: 480,
+          width: fluid ? "100%" : 480,
+          maxWidth: fluid ? 480 : undefined,
           background: "#ffffff",
           fontFamily:
             "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
