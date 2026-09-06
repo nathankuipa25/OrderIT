@@ -4,6 +4,7 @@ import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import { getSession } from "@/lib/session";
 import SWRegister from "./sw-register";
+import InstallButton from "@/components/InstallButton";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -35,6 +36,7 @@ export default async function RootLayout({
         </div>
         <BottomNav role={session?.role} />
         <SWRegister />
+        <InstallButton />
       </body>
     </html>
   );
