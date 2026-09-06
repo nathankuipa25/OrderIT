@@ -56,7 +56,7 @@ const OrderDocument = forwardRef<
             marginTop: 4,
           }}
         >
-          SHOP ORDER
+
         </div>
       </div>
 
@@ -65,7 +65,7 @@ const OrderDocument = forwardRef<
           {formatDate(createdAt)}
         </div>
         <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-          {formatTime(createdAt)} · Order #{String(orderNumber).padStart(3, "0")}
+          {formatTime(createdAt)}}
         </div>
       </div>
 
