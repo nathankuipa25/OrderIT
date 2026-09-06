@@ -123,12 +123,70 @@ export default function OrderDetailsPage() {
         unit: "pt",
         format: "a4",
       });
+      
       const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 40;
       const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+      
+      // Calculate image dimensions
       const imgHeight = (img.height / img.width) * usableWidth;
-
-      pdf.addImage(dataUrl, "PNG", margin, margin, usableWidth, imgHeight);
+      
+      // If content fits on one page, use the original logic
+      if (imgHeight <= usableHeight) {
+        pdf.addImage(dataUrl, "PNG", margin, margin, usableWidth, imgHeight);
+      } else {
+        // Content spans multiple pages - split the image
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas context not available");
+        ctx.drawImage(img, 0, 0);
+        
+        let yOffset = 0;
+        let pageNumber = 0;
+        
+        while (yOffset < img.height) {
+          if (pageNumber > 0) {
+            pdf.addPage();
+          }
+          
+          // Calculate how much of the image fits on this page
+          const pixelHeight = Math.min(
+            (usableHeight / imgHeight) * img.height,
+            img.height - yOffset
+          );
+          
+          // Create a canvas for this page's content
+          const pageCanvas = document.createElement("canvas");
+          pageCanvas.width = img.width;
+          pageCanvas.height = pixelHeight;
+          const pageCtx = pageCanvas.getContext("2d");
+          if (!pageCtx) throw new Error("Canvas context not available");
+          pageCtx.drawImage(
+            canvas,
+            0,
+            yOffset,
+            img.width,
+            pixelHeight,
+            0,
+            0,
+            img.width,
+            pixelHeight
+          );
+          
+          // Add this page to the PDF
+          const pageDataUrl = pageCanvas.toDataURL("image/png");
+          const pageImgHeight = (pixelHeight / img.width) * usableWidth;
+          pdf.addImage(pageDataUrl, "PNG", margin, margin, usableWidth, pageImgHeight);
+          
+          yOffset += pixelHeight;
+          pageNumber++;
+        }
+      }
+      
       pdf.save(`order-${String(order.orderNumber).padStart(3, "0")}.pdf`);
       showToast("✓ PDF generated");
     } catch {
