@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import OrderDocument from "@/components/OrderDocument";
 import Skeleton from "@/components/Skeleton";
+import Toast from "@/components/Toast";
 import { useOrderExport } from "@/lib/useOrderExport";
 
 type Item = { id: string; product: { name: string } };
@@ -147,11 +148,7 @@ export default function OrderDetailsPage() {
         </>
       )}
 
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-subtle z-50">
-          {toast}
-        </div>
-      )}
+      {toast && <Toast message={toast.message} variant={toast.variant} />}
     </div>
   );
 }

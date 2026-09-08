@@ -58,11 +58,13 @@ export function useOrderExport({
 
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [busy, setBusy] = useState<"" | "image" | "pdf" | "share">("");
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<{ message: string; variant: "success" | "error" } | null>(
+    null
+  );
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2400);
+  function showToast(message: string, variant: "success" | "error" = "success") {
+    setToast({ message, variant });
+    setTimeout(() => setToast(null), 2400);
   }
 
   function baseName() {
@@ -90,7 +92,7 @@ export function useOrderExport({
       }
       showToast(multi ? `✓ ${pages.length} images saved` : "✓ Image saved");
     } catch {
-      showToast("Something went wrong generating the image.");
+      showToast("Something went wrong generating the image.", "error");
     } finally {
       setBusy("");
     }
@@ -151,7 +153,7 @@ export function useOrderExport({
       showToast("✓ PDF generated");
     } catch (err) {
       console.error("PDF generation error:", err);
-      showToast("Something went wrong generating the PDF.");
+      showToast("Something went wrong generating the PDF.", "error");
     } finally {
       setBusy("");
     }
