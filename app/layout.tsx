@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import SWRProvider from "@/components/SWRProvider";
 import { getSession } from "@/lib/session";
 import SWRegister from "./sw-register";
 import InstallButton from "@/components/InstallButton";
@@ -31,10 +32,12 @@ export default async function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
       </head>
       <body className={`${inter.variable} font-sans bg-surface min-h-screen`}>
-        <div className="pb-20 md:pb-6 md:pl-56">
-          <div className="page-container px-4 pt-4">{children}</div>
-        </div>
-        <BottomNav role={session?.role} />
+        <SWRProvider>
+          <div className="pb-20 md:pb-6 md:pl-56">
+            <div className="page-container px-4 pt-4">{children}</div>
+          </div>
+          <BottomNav role={session?.role} />
+        </SWRProvider>
         <SWRegister />
         <InstallButton />
       </body>

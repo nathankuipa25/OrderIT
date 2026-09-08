@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import useSWR from "swr";
 import ProductRow from "@/components/ProductRow";
 import Skeleton from "@/components/Skeleton";
 import { getDraft, setDraft } from "@/lib/orderDraft";
@@ -11,17 +12,24 @@ type Product = { id: string; name: string; active: boolean };
 
 export default function CreateOrderPage() {
   const router = useRouter();
-  const [products, setProducts] = useState<Product[] | null>(null);
-  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  const { data, error: fetchError } = useSWR<{ products: Product[] }>(
+    "/api/products?active=true",
+    {
+      // The catalog rarely changes mid-session; avoid refetching every
+      // time the tab regains focus, but keep a short cache so repeat
+      // visits to this screen feel instant.
+      revalidateOnFocus: false,
+      dedupingInterval: 30_000,
+    }
+  );
+  const products = data?.products ?? null;
+  const error = fetchError ? "Something went wrong loading products." : "";
+
   useEffect(() => {
     setSelected(new Set(getDraft()));
-    fetch("/api/products?active=true")
-      .then((r) => r.json())
-      .then((data) => setProducts(data.products ?? []))
-      .catch(() => setError("Something went wrong loading products."));
   }, []);
 
   const filtered = useMemo(() => {
