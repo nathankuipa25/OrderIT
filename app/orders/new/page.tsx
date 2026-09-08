@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ProductRow from "@/components/ProductRow";
+import Skeleton from "@/components/Skeleton";
 import { getDraft, setDraft } from "@/lib/orderDraft";
 
 type Product = { id: string; name: string; active: boolean };
@@ -98,10 +99,7 @@ export default function CreateOrderPage() {
       {products === null ? (
         <div className="flex flex-col gap-2.5">
           {[...Array(6)].map((_, i) => (
-            <div
-              key={i}
-              className="h-[52px] rounded-xl bg-gray-100 animate-pulse"
-            />
+            <Skeleton key={i} className="h-[52px]" />
           ))}
         </div>
       ) : filtered.length === 0 ? (

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import OrderDocument from "@/components/OrderDocument";
+import Skeleton from "@/components/Skeleton";
 import { useOrderExport } from "@/lib/useOrderExport";
 
 type Item = { id: string; product: { name: string } };
@@ -77,7 +78,7 @@ export default function OrderDetailsPage() {
       </header>
 
       {!order ? (
-        <div className="h-64 rounded-2xl bg-gray-100 animate-pulse" />
+        <Skeleton className="h-64" />
       ) : (
         <>
           {/* Hidden full-resolution nodes used only for image/PDF capture */}

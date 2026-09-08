@@ -27,3 +27,23 @@ body {
 .page-container {
   @apply max-w-md mx-auto md:max-w-2xl w-full;
 }
+
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.skeleton {
+  background-image: linear-gradient(
+    90deg,
+    #eef0f2 25%,
+    #e2e5e9 37%,
+    #eef0f2 63%
+  );
+  background-size: 400px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}

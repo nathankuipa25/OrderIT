@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Skeleton from "@/components/Skeleton";
 
 type Product = { id: string; name: string; active: boolean };
 
@@ -109,7 +110,7 @@ export default function EditProductPage() {
       </header>
 
       {!product ? (
-        <div className="h-40 rounded-xl bg-gray-100 animate-pulse" />
+        <Skeleton className="h-40" />
       ) : (
         <>
           <form onSubmit={handleSave} className="flex flex-col gap-4 mb-8">

@@ -8,13 +8,41 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Please log in." }, { status: 401 });
   }
 
-  const activeOnly = req.nextUrl.searchParams.get("active") === "true";
+  const params = req.nextUrl.searchParams;
+  const activeOnly = params.get("active") === "true";
+  const q = params.get("q")?.trim() || "";
+  const takeParam = params.get("take");
+  const skipParam = params.get("skip");
+  const take = takeParam ? parseInt(takeParam, 10) : undefined;
+  const skip = skipParam ? parseInt(skipParam, 10) : 0;
+
+  const where = {
+    ...(activeOnly ? { active: true } : {}),
+    ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
+  };
+
   try {
-    const products = await prisma.product.findMany({
-      where: activeOnly ? { active: true } : undefined,
+    // Unpaginated callers (Create Order product picker, order review preview)
+    // keep getting the full list, unchanged.
+    if (take === undefined) {
+      const products = await prisma.product.findMany({
+        where,
+        orderBy: { name: "asc" },
+      });
+      return NextResponse.json({ products });
+    }
+
+    // Paginated callers (Products management list) get one page + whether
+    // there's more to lazily load.
+    const rows = await prisma.product.findMany({
+      where,
       orderBy: { name: "asc" },
+      take: take + 1,
+      skip,
     });
-    return NextResponse.json({ products });
+    const hasMore = rows.length > take;
+    const products = hasMore ? rows.slice(0, take) : rows;
+    return NextResponse.json({ products, hasMore });
   } catch (err) {
     console.error(err);
     return NextResponse.json(

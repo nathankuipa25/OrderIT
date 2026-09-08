@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getDraft, setDraft, clearDraft } from "@/lib/orderDraft";
 import OrderDocument from "@/components/OrderDocument";
+import Skeleton from "@/components/Skeleton";
 import { useOrderExport } from "@/lib/useOrderExport";
 
 type Product = { id: string; name: string };
@@ -111,7 +112,7 @@ export default function ReviewOrderPage() {
       {loading ? (
         <div className="flex flex-col gap-2.5">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-12 rounded-xl bg-gray-100 animate-pulse" />
+            <Skeleton key={i} className="h-12" />
           ))}
         </div>
       ) : (

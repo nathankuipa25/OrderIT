@@ -1,31 +1,94 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import EmptyState from "@/components/EmptyState";
+import Skeleton from "@/components/Skeleton";
 
 type Product = { id: string; name: string; active: boolean };
 
+const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[] | null>(null);
-  const [query, setQuery] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState("");
 
-  function load() {
-    fetch("/api/products")
-      .then((r) => r.json())
-      .then((data) => setProducts(data.products ?? []))
-      .catch(() => setError("Something went wrong loading products."));
-  }
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
 
-  useEffect(load, []);
+  // Debounce search input so we're not hitting the API on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const filtered = useMemo(() => {
-    if (!products) return [];
-    const q = query.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter((p) => p.name.toLowerCase().includes(q));
-  }, [products, query]);
+  const skipRef = useRef(0);
+  const loadingRef = useRef(false);
+
+  const fetchPage = useCallback(
+    async (opts: { reset: boolean }) => {
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+      if (opts.reset) {
+        setInitialLoading(true);
+        skipRef.current = 0;
+      } else {
+        setLoadingMore(true);
+      }
+      setError("");
+
+      try {
+        const params = new URLSearchParams({
+          take: String(PAGE_SIZE),
+          skip: String(opts.reset ? 0 : skipRef.current),
+        });
+        if (debouncedQuery) params.set("q", debouncedQuery);
+
+        const res = await fetch(`/api/products?${params.toString()}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to load");
+
+        const newProducts: Product[] = data.products ?? [];
+        setProducts((prev) => (opts.reset ? newProducts : [...prev, ...newProducts]));
+        setHasMore(Boolean(data.hasMore));
+        skipRef.current = (opts.reset ? 0 : skipRef.current) + newProducts.length;
+      } catch {
+        setError("Something went wrong loading products.");
+      } finally {
+        loadingRef.current = false;
+        setInitialLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [debouncedQuery]
+  );
+
+  // Reload from scratch whenever the (debounced) search term changes.
+  useEffect(() => {
+    fetchPage({ reset: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQuery]);
+
+  // Infinite scroll: observe a sentinel at the bottom of the list.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingRef.current) {
+          fetchPage({ reset: false });
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, fetchPage]);
 
   return (
     <div className="pb-10">
@@ -65,57 +128,73 @@ export default function ProductsPage() {
 
       {error && <div className="text-sm text-danger mb-4">{error}</div>}
 
-      {products === null ? (
+      {initialLoading ? (
         <div className="flex flex-col gap-2.5">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-gray-100 animate-pulse" />
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-16" />
           ))}
         </div>
       ) : products.length === 0 ? (
-        <EmptyState
-          title="No products yet"
-          description="Add products to create your shop catalog."
-          action={
-            <Link href="/products/new" className="btn-primary w-full">
-              Add Product
-            </Link>
-          }
-        />
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-10">
-          <div className="font-semibold text-ink">No products found</div>
-          <div className="text-sm text-muted mt-1">Try a different search.</div>
-        </div>
+        debouncedQuery ? (
+          <div className="text-center py-10">
+            <div className="font-semibold text-ink">No products found</div>
+            <div className="text-sm text-muted mt-1">Try a different search.</div>
+          </div>
+        ) : (
+          <EmptyState
+            title="No products yet"
+            description="Add products to create your shop catalog."
+            action={
+              <Link href="/products/new" className="btn-primary w-full">
+                Add Product
+              </Link>
+            }
+          />
+        )
       ) : (
-        <div className="flex flex-col gap-2.5">
-          {filtered.map((p) => (
-            <Link
-              key={p.id}
-              href={`/products/${p.id}/edit`}
-              className="card flex items-center justify-between px-4 py-3.5 min-h-[44px]"
-            >
-              <div>
-                <div className="font-medium text-ink">{p.name}</div>
-                <div
-                  className={`text-xs mt-0.5 font-medium ${
-                    p.active ? "text-success" : "text-muted"
-                  }`}
-                >
-                  {p.active ? "Active" : "Inactive"}
+        <>
+          <div className="flex flex-col gap-2.5">
+            {products.map((p) => (
+              <Link
+                key={p.id}
+                href={`/products/${p.id}/edit`}
+                className="card flex items-center justify-between px-4 py-3.5 min-h-[44px]"
+              >
+                <div>
+                  <div className="font-medium text-ink">{p.name}</div>
+                  <div
+                    className={`text-xs mt-0.5 font-medium ${
+                      p.active ? "text-success" : "text-muted"
+                    }`}
+                  >
+                    {p.active ? "Active" : "Inactive"}
+                  </div>
                 </div>
-              </div>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M9 6l6 6-6 6"
-                  stroke="#9ca3af"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </Link>
-          ))}
-        </div>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M9 6l6 6-6 6"
+                    stroke="#9ca3af"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </Link>
+            ))}
+          </div>
+
+          {/* Sentinel: crossing into view triggers the next page load */}
+          {hasMore && (
+            <div ref={sentinelRef} className="flex flex-col gap-2.5 mt-2.5">
+              {loadingMore && (
+                <>
+                  <Skeleton className="h-16" />
+                  <Skeleton className="h-16" />
+                </>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
