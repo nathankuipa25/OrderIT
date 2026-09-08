@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 
 export default function AccountMenu({
@@ -60,6 +61,13 @@ export default function AccountMenu({
               {role === "ADMIN" ? "Admin" : "Shop account"}
             </div>
           </div>
+          <Link
+            href="/account"
+            onClick={() => setOpen(false)}
+            className="block w-full text-left px-1 py-1.5 text-sm font-medium text-ink"
+          >
+            Account settings
+          </Link>
           <button
             onClick={handleLogout}
             disabled={loggingOut}
