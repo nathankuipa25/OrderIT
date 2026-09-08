@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login", "/register"];
+const PUBLIC_ASSET_PATHS = [
+  "/manifest.webmanifest",
+  "/service-worker.js",
+  "/icons/",
+  "/.well-known/",
+];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (
     PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
+    PUBLIC_ASSET_PATHS.some((p) => pathname === p || pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
@@ -45,5 +52,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|service-worker.js|icons/|\\.well-known/).*)",
+  ],
 };
