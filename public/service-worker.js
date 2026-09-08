@@ -1,5 +1,5 @@
 // Basic service worker with precache + runtime caching
-const CACHE_NAME = 'orderit-cache-v1';
+const CACHE_NAME = 'orderit-cache-v2';
 const PRECACHE_URLS = [
   '/',
   '/manifest.webmanifest',
@@ -41,6 +41,19 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => caches.match(request).then((res) => res || caches.match('/')))
+    );
+    return;
+  }
+
+  // Next.js static build assets are content-hashed — a new deploy always
+  // gets a new URL, so these are safe to cache aggressively forever.
+  if (new URL(request.url).pathname.startsWith('/_next/static/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => cached || fetch(request).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        return res;
+      }))
     );
     return;
   }
