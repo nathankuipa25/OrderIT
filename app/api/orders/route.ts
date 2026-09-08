@@ -9,11 +9,35 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Please log in." }, { status: 401 });
   }
 
-  const limitParam = req.nextUrl.searchParams.get("limit");
-  const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+  const params = req.nextUrl.searchParams;
   const isAdmin = session.role === "ADMIN";
+  const takeParam = params.get("take");
 
   try {
+    // Lightweight paginated list mode (Home/Orders infinite scroll): returns
+    // item counts, not full item+product payloads, and reports hasMore.
+    if (takeParam) {
+      const take = parseInt(takeParam, 10);
+      const skip = parseInt(params.get("skip") || "0", 10);
+
+      const rows = await prisma.order.findMany({
+        where: isAdmin ? undefined : { userId: session.sub },
+        orderBy: { createdAt: "desc" },
+        take: take + 1,
+        skip,
+        include: {
+          _count: { select: { items: true } },
+          ...(isAdmin ? { user: { select: { name: true } } } : {}),
+        },
+      });
+      const hasMore = rows.length > take;
+      const orders = hasMore ? rows.slice(0, take) : rows;
+      return NextResponse.json({ orders, hasMore });
+    }
+
+    // Legacy/full mode: complete item + product payload, optional simple limit.
+    const limitParam = params.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
     const orders = await prisma.order.findMany({
       where: isAdmin ? undefined : { userId: session.sub },
       orderBy: { createdAt: "desc" },
