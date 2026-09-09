@@ -19,6 +19,16 @@ function formatTime(iso: string) {
   });
 }
 
+// Shop names are user-supplied at registration and can be arbitrarily long —
+// step the title size down rather than letting it wrap to many lines or
+// (if it's a single unbroken word) overflow the document width.
+function titleFontSize(title: string): number {
+  if (title.length > 32) return 15;
+  if (title.length > 24) return 17;
+  if (title.length > 16) return 19;
+  return 22;
+}
+
 type OrderDocumentProps = {
   orderNumber: number;
   createdAt: string;
@@ -78,10 +88,13 @@ const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div
             style={{
-              fontSize: 22,
+              fontSize: titleFontSize(title),
               fontWeight: 800,
               letterSpacing: 1,
               color: "#0f2340",
+              overflowWrap: "break-word",
+              wordBreak: "break-word",
+              lineHeight: 1.25,
             }}
           >
             {title}
@@ -151,7 +164,15 @@ const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
               >
                 {String(startIndex + idx + 1).padStart(2, "0")}
               </span>
-              <span style={{ fontWeight: 500 }}>{item.product.name}</span>
+              <span
+                style={{
+                  fontWeight: 500,
+                  overflowWrap: "break-word",
+                  wordBreak: "break-word",
+                }}
+              >
+                {item.product.name}
+              </span>
             </div>
           ))}
         </div>
