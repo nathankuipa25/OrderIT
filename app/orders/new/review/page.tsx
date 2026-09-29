@@ -3,10 +3,25 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { getDraft, setDraft, clearDraft } from "@/lib/orderDraft";
 import OrderDocument from "@/components/OrderDocument";
 import Skeleton from "@/components/Skeleton";
 import Toast from "@/components/Toast";
+import SortableProductRow from "@/components/SortableProductRow";
 import { useOrderExport } from "@/lib/useOrderExport";
 
 type Product = { id: string; name: string };
@@ -52,6 +67,26 @@ export default function ReviewOrderPage() {
       const next = prev.filter((p) => p.id !== id);
       setDraft(next.map((p) => p.id));
       if (next.length === 0) router.replace("/orders/new");
+      return next;
+    });
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setItems((prev) => {
+      const oldIndex = prev.findIndex((p) => p.id === active.id);
+      const newIndex = prev.findIndex((p) => p.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const next = arrayMove(prev, oldIndex, newIndex);
+      setDraft(next.map((p) => p.id));
       return next;
     });
   }
@@ -124,25 +159,31 @@ export default function ReviewOrderPage() {
                 Order
               </div>
               <div className="text-sm text-muted mb-4">
-                {items.length} product{items.length === 1 ? "" : "s"}
+                {items.length} product{items.length === 1 ? "" : "s"} · drag to
+                reorder by priority
               </div>
-              <div className="flex flex-col divide-y divide-gray-100">
-                {items.map((p, idx) => (
-                  <div key={p.id} className="flex items-center justify-between py-3">
-                    <span className="text-[15px]">
-                      <span className="text-muted mr-2">{idx + 1}.</span>
-                      {p.name}
-                    </span>
-                    <button
-                      onClick={() => removeItem(p.id)}
-                      aria-label={`Remove ${p.name}`}
-                      className="w-8 h-8 flex items-center justify-center text-muted text-lg"
-                    >
-                      ×
-                    </button>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={items.map((p) => p.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="flex flex-col divide-y divide-gray-100">
+                    {items.map((p, idx) => (
+                      <SortableProductRow
+                        key={p.id}
+                        id={p.id}
+                        index={idx}
+                        name={p.name}
+                        onRemove={() => removeItem(p.id)}
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
+                </SortableContext>
+              </DndContext>
             </div>
 
             {error && <div className="text-sm text-danger mt-4">{error}</div>}

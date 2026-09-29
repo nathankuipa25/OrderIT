@@ -58,6 +58,10 @@ model OrderItem {
   id        String  @id @default(cuid())
   orderId   String
   productId String
+  // Priority order chosen by the shop when reviewing the order (drag to
+  // reorder). Without this, item order would depend on database insertion
+  // order, which Postgres never guarantees on read.
+  position  Int     @default(0)
   order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id])
 

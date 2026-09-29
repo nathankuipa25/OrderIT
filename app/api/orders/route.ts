@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
       take: limit,
       include: {
-        items: { include: { product: true } },
+        items: { include: { product: true }, orderBy: { position: "asc" } },
         ...(isAdmin ? { user: { select: { name: true } } } : {}),
       },
     });
@@ -104,10 +104,15 @@ export async function POST(req: NextRequest) {
           orderNumber: nextNumber,
           userId: session.sub,
           items: {
-            create: productIds.map((productId) => ({ productId })),
+            create: productIds.map((productId, position) => ({
+              productId,
+              position,
+            })),
           },
         },
-        include: { items: { include: { product: true } } },
+        include: {
+          items: { include: { product: true }, orderBy: { position: "asc" } },
+        },
       });
     });
 
