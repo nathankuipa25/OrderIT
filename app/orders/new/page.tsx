@@ -6,6 +6,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import ProductRow from "@/components/ProductRow";
 import Skeleton from "@/components/Skeleton";
+import Toast from "@/components/Toast";
 import { getDraft, setDraft } from "@/lib/orderDraft";
 
 type Product = { id: string; name: string; active: boolean };
@@ -14,6 +15,9 @@ export default function CreateOrderPage() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ message: string; variant: "success" | "error" } | null>(
+    null
+  );
 
   const { data, error: fetchError } = useSWR<{ products: Product[] }>(
     "/api/products?active=true",
@@ -30,6 +34,18 @@ export default function CreateOrderPage() {
 
   useEffect(() => {
     setSelected(new Set(getDraft()));
+
+    const dropped = new URLSearchParams(window.location.search).get("dropped");
+    const count = dropped ? parseInt(dropped, 10) : 0;
+    if (count > 0) {
+      setToast({
+        message: `${count} product${count === 1 ? "" : "s"} from that order ${
+          count === 1 ? "is" : "are"
+        } no longer active and ${count === 1 ? "was" : "were"} left out.`,
+        variant: "error",
+      });
+      setTimeout(() => setToast(null), 3200);
+    }
   }, []);
 
   const filtered = useMemo(() => {
@@ -142,6 +158,8 @@ export default function CreateOrderPage() {
           </div>
         </div>
       )}
+
+      {toast && <Toast message={toast.message} variant={toast.variant} />}
     </div>
   );
 }

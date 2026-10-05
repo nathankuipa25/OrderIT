@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import OrderDocument from "@/components/OrderDocument";
 import Skeleton from "@/components/Skeleton";
 import Toast from "@/components/Toast";
 import { useOrderExport } from "@/lib/useOrderExport";
+import { setDraft } from "@/lib/orderDraft";
 
-type Item = { id: string; product: { name: string } };
+type Item = { id: string; product: { id: string; name: string; active: boolean } };
 type OrderData = {
   id: string;
   orderNumber: number;
@@ -19,10 +20,19 @@ type OrderData = {
 
 export default function OrderDetailsPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string;
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [error, setError] = useState("");
+  const [isShop, setIsShop] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => setIsShop(data?.user?.role === "SHOP"))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -42,6 +52,20 @@ export default function OrderDetailsPage() {
       items: order?.items ?? [],
       title: order?.user?.name,
     });
+
+  function startNewOrderFromThis() {
+    if (!order) return;
+    // Only carry forward products that are still active — a deactivated
+    // product won't be selectable on the Create Order screen anyway.
+    const activeIds = order.items
+      .filter((i) => i.product.active)
+      .map((i) => i.product.id);
+    const droppedCount = order.items.length - activeIds.length;
+
+    setDraft(activeIds);
+    const query = droppedCount > 0 ? `?dropped=${droppedCount}` : "";
+    router.push(`/orders/new${query}`);
+  }
 
   if (error) {
     return (
@@ -145,6 +169,18 @@ export default function OrderDetailsPage() {
               {busy === "pdf" ? "Generating..." : "Generate PDF"}
             </button>
           </div>
+
+          {isShop && (
+            <div className="mt-6 pt-5 border-t border-gray-100">
+              <div className="text-xs text-muted mb-2.5 text-center">
+                Not fully processed? Start a new order with these products,
+                then add more before generating.
+              </div>
+              <button onClick={startNewOrderFromThis} className="btn-secondary w-full">
+                Start New Order From This
+              </button>
+            </div>
+          )}
         </>
       )}
 
