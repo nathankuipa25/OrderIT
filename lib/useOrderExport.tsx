@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import OrderDocument from "@/components/OrderDocument";
-import { computeMaxPageHeightPx, paginateItems } from "@/lib/orderPagination";
+import { paginateItems } from "@/lib/orderPagination";
 
 type Item = { id: string; product: { name: string } };
 
@@ -50,11 +50,7 @@ export function useOrderExport({
   /** Defaults to order-###. Review preview passes its own base since there's no order number yet. */
   filenameBase?: string;
 }) {
-  const maxPageHeightPx = useMemo(() => computeMaxPageHeightPx(), []);
-  const pages = useMemo(
-    () => paginateItems(items, maxPageHeightPx),
-    [items, maxPageHeightPx]
-  );
+  const pages = useMemo(() => paginateItems(items), [items]);
 
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [busy, setBusy] = useState<"" | "image" | "pdf" | "share">("");
@@ -133,10 +129,11 @@ export function useOrderExport({
     setBusy("pdf");
     try {
       const { jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-      const pageWidthPt = pdf.internal.pageSize.getWidth();
       const marginPt = 40;
+      const pageWidthPt = 595.28; // A4 width — kept constant for a consistent printable width
       const usableWidthPt = pageWidthPt - marginPt * 2;
+
+      let pdf: InstanceType<typeof jsPDF> | null = null;
 
       for (let i = 0; i < pages.length; i++) {
         const blob = await renderPagePng(i);
@@ -144,12 +141,25 @@ export function useOrderExport({
         const dataUrl = await blobToDataUrl(blob);
         const img = await loadImage(dataUrl);
         const imgHeightPt = (img.height / img.width) * usableWidthPt;
+        // Each page is sized to exactly fit its own content — a page can
+        // hold up to 25 items now, which may be taller than one standard
+        // A4 sheet's usable height, so a fixed page size would silently
+        // clip the image at the page boundary.
+        const pageHeightPt = imgHeightPt + marginPt * 2;
 
-        if (i > 0) pdf.addPage();
+        if (!pdf) {
+          pdf = new jsPDF({
+            orientation: "portrait",
+            unit: "pt",
+            format: [pageWidthPt, pageHeightPt],
+          });
+        } else {
+          pdf.addPage([pageWidthPt, pageHeightPt], "portrait");
+        }
         pdf.addImage(dataUrl, "PNG", marginPt, marginPt, usableWidthPt, imgHeightPt);
       }
 
-      pdf.save(`${baseName()}.pdf`);
+      pdf!.save(`${baseName()}.pdf`);
       showToast("✓ PDF generated");
     } catch (err) {
       console.error("PDF generation error:", err);
