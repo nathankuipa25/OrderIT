@@ -10,7 +10,7 @@ export default function Toast({
   return (
     <div
       role={variant === "error" ? "alert" : "status"}
-      className={`fixed bottom-6 left-1/2 -translate-x-1/2 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-subtle z-50 flex items-center gap-2 ${
+      className={`fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-subtle z-50 flex items-center gap-2 ${
         variant === "error" ? "bg-danger" : "bg-navy"
       }`}
     >

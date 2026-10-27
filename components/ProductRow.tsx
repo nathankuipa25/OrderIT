@@ -11,6 +11,8 @@ export default function ProductRow({
     <button
       type="button"
       onClick={onToggle}
+      aria-pressed={selected}
+      aria-label={`${name}, ${selected ? "selected" : "not selected"}`}
       className={`w-full flex items-center justify-between px-4 py-3.5 min-h-[52px] rounded-xl border text-left transition ${
         selected
           ? "bg-accent-light border-accent"

@@ -5,8 +5,51 @@ import Link from "next/link";
 import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import Toast from "@/components/Toast";
+import { getLoadState } from "@/lib/load-state.mjs";
 
 type Product = { id: string; name: string; active: boolean };
+type ImportRow = {
+  line: number;
+  rowNumber: number;
+  name: string;
+  active: boolean;
+  errors: string[];
+  status: "invalid" | "duplicate-file" | "already-exists" | "ready";
+};
+type ImportSummary = {
+  total: number;
+  ready: number;
+  invalid: number;
+  alreadyExists: number;
+  duplicateFile: number;
+};
+type ImportResult = {
+  created: number;
+  skippedExisting: number;
+  skippedDuplicate: number;
+  invalid: number;
+  skippedRace: number;
+};
+type ImportPreview = {
+  fileName: string;
+  csv: string;
+  rows: ImportRow[];
+  summary: ImportSummary;
+  result?: ImportResult;
+};
+
+function importStatusLabel(status: ImportRow["status"]) {
+  if (status === "ready") return "Ready to add";
+  if (status === "already-exists") return "Already in catalog";
+  if (status === "duplicate-file") return "Repeated in CSV";
+  return "Needs correction";
+}
+
+function importStatusClass(status: ImportRow["status"]) {
+  if (status === "ready") return "text-success";
+  if (status === "invalid") return "text-danger";
+  return "text-muted";
+}
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -17,14 +60,19 @@ export default function ProductsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState("");
+  const [failedPage, setFailedPage] = useState<"initial" | "more" | null>(null);
 
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const latestQueryRef = useRef(debouncedQuery);
+  latestQueryRef.current = debouncedQuery;
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [toast, setToast] = useState<{ message: string; variant: "success" | "error" } | null>(
     null
   );
@@ -43,25 +91,32 @@ export default function ProductsPage() {
 
   const skipRef = useRef(0);
   const loadingRef = useRef(false);
+  const pendingResetRef = useRef(false);
 
   const fetchPage = useCallback(
     async (opts: { reset: boolean }) => {
-      if (loadingRef.current) return;
+      if (loadingRef.current) {
+        if (opts.reset) pendingResetRef.current = true;
+        return;
+      }
       loadingRef.current = true;
       if (opts.reset) {
         setInitialLoading(true);
         skipRef.current = 0;
+        setProducts([]);
+        setHasMore(false);
       } else {
         setLoadingMore(true);
       }
       setError("");
+      setFailedPage(null);
 
       try {
         const params = new URLSearchParams({
           take: String(PAGE_SIZE),
           skip: String(opts.reset ? 0 : skipRef.current),
         });
-        if (debouncedQuery) params.set("q", debouncedQuery);
+        if (latestQueryRef.current) params.set("q", latestQueryRef.current);
 
         const res = await fetch(`/api/products?${params.toString()}`);
         const data = await res.json();
@@ -71,15 +126,24 @@ export default function ProductsPage() {
         setProducts((prev) => (opts.reset ? newProducts : [...prev, ...newProducts]));
         setHasMore(Boolean(data.hasMore));
         skipRef.current = (opts.reset ? 0 : skipRef.current) + newProducts.length;
-      } catch {
-        setError("Something went wrong loading products.");
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Something went wrong loading products."
+        );
+        setFailedPage(opts.reset ? "initial" : "more");
       } finally {
         loadingRef.current = false;
         setInitialLoading(false);
         setLoadingMore(false);
+        if (pendingResetRef.current) {
+          pendingResetRef.current = false;
+          window.setTimeout(() => {
+            void fetchPage({ reset: true });
+          }, 0);
+        }
       }
     },
-    [debouncedQuery]
+    []
   );
 
   // Reload from scratch whenever the (debounced) search term changes.
@@ -95,7 +159,7 @@ export default function ProductsPage() {
     if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingRef.current) {
+        if (entries[0].isIntersecting && hasMore && !loadingRef.current && !error) {
           fetchPage({ reset: false });
         }
       },
@@ -103,7 +167,7 @@ export default function ProductsPage() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, fetchPage]);
+  }, [hasMore, fetchPage, error]);
 
   function toggleSelectMode() {
     setSelectMode((v) => !v);
@@ -157,45 +221,114 @@ export default function ProductsPage() {
     setImporting(true);
     try {
       const text = await file.text();
-      // Accept one name per line, optionally with a "name" CSV header/column —
-      // just take the first comma-separated field on each line.
-      const names = text
-        .split(/\r?\n/)
-        .map((line) => line.split(",")[0]?.trim())
-        .filter((name) => name && name.toLowerCase() !== "name");
-
-      if (names.length === 0) {
-        showToast("No product names found in that file.", "error");
-        return;
-      }
-
       const res = await fetch("/api/products/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names }),
+        body: JSON.stringify({ action: "preview", csv: text }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
-
+      if (!res.ok) throw new Error(data.error || "Could not preview that CSV file.");
+      setImportPreview({
+        fileName: file.name,
+        csv: text,
+        rows: data.rows ?? [],
+        summary: data.summary ?? {
+          total: 0,
+          ready: 0,
+          invalid: 0,
+          alreadyExists: 0,
+          duplicateFile: 0,
+        },
+      });
+    } catch (err) {
       showToast(
-        `✓ Imported ${data.created} product${data.created === 1 ? "" : "s"}` +
-          (data.skipped ? ` (${data.skipped} already existed)` : "")
+        err instanceof Error ? err.message : "Something went wrong reading that CSV file.",
+        "error"
       );
-      fetchPage({ reset: true });
-    } catch {
-      showToast("Something went wrong importing that file.", "error");
     } finally {
       setImporting(false);
     }
   }
 
+  async function handleConfirmImport() {
+    if (!importPreview || importPreview.summary.ready === 0 || importing) return;
+    setImporting(true);
+    try {
+      const res = await fetch("/api/products/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "import", csv: importPreview.csv }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not import those products.");
+      setImportPreview((current) =>
+        current
+          ? {
+              ...current,
+              rows: data.rows ?? current.rows,
+              summary: data.summary ?? current.summary,
+              result: {
+                created: data.created ?? 0,
+                skippedExisting: data.skippedExisting ?? 0,
+                skippedDuplicate: data.skippedDuplicate ?? 0,
+                invalid: data.invalid ?? 0,
+                skippedRace: data.skippedRace ?? 0,
+              },
+            }
+          : current
+      );
+      fetchPage({ reset: true });
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Something went wrong importing that CSV file.",
+        "error"
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/products/export");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not export products.");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "orderit-products.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast("Product CSV exported.");
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Something went wrong exporting products.",
+        "error"
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const loadState = getLoadState({
+    loading: initialLoading,
+    error: Boolean(error && products.length === 0),
+    itemCount: products.length,
+  });
+
   return (
-    <div className={selectMode && selectedIds.size > 0 ? "pb-28" : "pb-10"}>
+    <div className={selectMode && selectedIds.size > 0 ? "pb-40" : "pb-10"}>
       <header className="flex items-center justify-between py-2 mb-5 gap-2">
         <div className="text-2xl font-bold">
           {selectMode ? `${selectedIds.size} selected` : "Products"}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {selectMode ? (
             <button
               onClick={toggleSelectMode}
@@ -210,7 +343,14 @@ export default function ProductsPage() {
                 disabled={importing}
                 className="text-navy font-semibold text-sm"
               >
-                {importing ? "Importing..." : "Import"}
+                {importing ? "Working..." : "Import"}
+              </button>
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="text-navy font-semibold text-sm"
+              >
+                {exporting ? "Exporting..." : "Export"}
               </button>
               <button
                 onClick={toggleSelectMode}
@@ -232,7 +372,7 @@ export default function ProductsPage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".csv,.txt,text/csv,text/plain"
+        accept=".csv,text/csv"
         onChange={handleFileSelected}
         className="hidden"
       />
@@ -255,6 +395,7 @@ export default function ProductsPage() {
             />
           </svg>
           <input
+            aria-label="Search products"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search products..."
@@ -263,15 +404,38 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {error && <div className="text-sm text-danger mb-4">{error}</div>}
+      {error && products.length > 0 && failedPage === "initial" && (
+        <div role="alert" className="text-sm text-danger mb-4">
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => fetchPage({ reset: true })}
+            className="btn-secondary mt-3 px-4"
+          >
+            Retry loading products
+          </button>
+        </div>
+      )}
 
-      {initialLoading ? (
-        <div className="flex flex-col gap-2.5">
+      {loadState === "loading" ? (
+        <div role="status" aria-busy="true" aria-label="Loading products" className="flex flex-col gap-2.5">
           {[...Array(6)].map((_, i) => (
             <Skeleton key={i} className="h-16" />
           ))}
         </div>
-      ) : products.length === 0 ? (
+      ) : loadState === "error" ? (
+        <div role="alert" className="card p-5 text-center">
+          <div className="font-semibold text-ink">Products couldn&rsquo;t load</div>
+          <p className="text-sm text-muted mt-1">{error}</p>
+          <button
+            type="button"
+            onClick={() => fetchPage({ reset: true })}
+            className="btn-primary w-full mt-4"
+          >
+            Retry loading products
+          </button>
+        </div>
+      ) : loadState === "empty" ? (
         debouncedQuery ? (
           <div className="text-center py-10">
             <div className="font-semibold text-ink">No products found</div>
@@ -344,7 +508,10 @@ export default function ProductsPage() {
               return selectMode ? (
                 <button
                   key={p.id}
+                  type="button"
                   onClick={() => toggleSelected(p.id)}
+                  aria-pressed={selectedIds.has(p.id)}
+                  aria-label={`${p.name}, ${selectedIds.has(p.id) ? "selected" : "not selected"}`}
                   className="card flex items-center justify-between px-4 py-3.5 min-h-[44px] text-left"
                 >
                   {row}
@@ -363,20 +530,42 @@ export default function ProductsPage() {
 
           {/* Sentinel: crossing into view triggers the next page load */}
           {hasMore && (
-            <div ref={sentinelRef} className="flex flex-col gap-2.5 mt-2.5">
+            <>
+              <div ref={sentinelRef} aria-hidden="true" className="h-px" />
               {loadingMore && (
-                <>
+                <div role="status" aria-busy="true" aria-label="Loading more products" className="flex flex-col gap-2.5 mt-2.5">
                   <Skeleton className="h-16" />
                   <Skeleton className="h-16" />
-                </>
+                </div>
               )}
-            </div>
+              {error && products.length > 0 && failedPage === "more" && (
+                <div role="alert" className="text-sm text-danger text-center mt-3">
+                  <p>{error}</p>
+                  <button
+                    type="button"
+                    onClick={() => fetchPage({ reset: false })}
+                    className="btn-secondary mt-3 px-4"
+                  >
+                    Retry loading more products
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => fetchPage({ reset: false })}
+                disabled={loadingMore}
+                aria-busy={loadingMore}
+                className="btn-secondary w-full mt-3"
+              >
+                {loadingMore ? "Loading more products…" : "Load more products"}
+              </button>
+            </>
           )}
         </>
       )}
 
       {selectMode && selectedIds.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 md:pl-56">
+        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white border-t border-gray-100 md:bottom-0 md:pl-56">
           <div className="page-container px-4 py-3 flex gap-2.5">
             <button
               onClick={() => handleBulkSetActive(true)}
@@ -393,6 +582,128 @@ export default function ProductsPage() {
               {bulkBusy ? "Updating..." : "Deactivate"}
             </button>
           </div>
+        </div>
+      )}
+
+      {importPreview && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="product-import-title"
+            className="w-full max-w-xl max-h-[90vh] overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white shadow-xl flex flex-col"
+          >
+            <div className="px-5 pt-5 pb-4 border-b border-gray-100">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 id="product-import-title" className="text-lg font-bold text-ink">
+                    {importPreview.result ? "Import results" : "Review product import"}
+                  </h2>
+                  <p className="text-sm text-muted mt-1 truncate">{importPreview.fileName}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={importing}
+                  onClick={() => setImportPreview(null)}
+                  className="text-muted text-sm font-semibold disabled:opacity-50"
+                >
+                  Close
+                </button>
+              </div>
+
+              {importPreview.result ? (
+                <div className="mt-4 rounded-xl bg-gray-50 p-3 text-sm text-ink">
+                  <div className="font-semibold">
+                    Added {importPreview.result.created} product{importPreview.result.created === 1 ? "" : "s"}.
+                  </div>
+                  <div className="mt-1 text-muted">
+                    Skipped {importPreview.result.skippedExisting} already in the catalog, {importPreview.result.skippedDuplicate} repeated in the CSV, {importPreview.result.skippedRace} added by another import, and {importPreview.result.invalid} invalid row{importPreview.result.invalid === 1 ? "" : "s"}.
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-4 text-sm">
+                  <div className="text-success">{importPreview.summary.ready} ready to add</div>
+                  <div className="text-muted">{importPreview.summary.alreadyExists} already in catalog</div>
+                  <div className="text-muted">{importPreview.summary.duplicateFile} repeated in CSV</div>
+                  <div className={importPreview.summary.invalid ? "text-danger" : "text-muted"}>
+                    {importPreview.summary.invalid} need correction
+                  </div>
+                </div>
+              )}
+              {!importPreview.result && (
+                <p className="text-xs text-muted mt-3">
+                  Name is required. Enabled is optional; blank values default to enabled. Other CSV columns are ignored.
+                </p>
+              )}
+            </div>
+
+            <div className="overflow-y-auto px-5 py-3">
+              {importPreview.rows.length === 0 ? (
+                <p className="text-sm text-muted py-3">No product rows were found in this file.</p>
+              ) : (
+                <>
+                  <div className="text-xs text-muted mb-2">
+                    Showing {Math.min(importPreview.rows.length, 150)} of {importPreview.rows.length} data rows.
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {importPreview.rows.slice(0, 150).map((row, index) => (
+                      <div key={`${row.rowNumber}-${index}`} className="py-2.5 flex items-start justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <div className="font-medium text-ink break-words">
+                            {row.name || <span className="italic text-muted">(blank Name)</span>}
+                          </div>
+                          <div className="text-xs text-muted mt-0.5">
+                            Row {row.rowNumber}{row.errors.length === 0 ? ` · ${row.active ? "Enabled" : "Disabled"}` : ""}
+                          </div>
+                          {row.errors.length > 0 && (
+                            <div className="text-xs text-danger mt-1">{row.errors.join(" ")}</div>
+                          )}
+                        </div>
+                        <span className={`shrink-0 text-xs font-semibold ${importStatusClass(row.status)}`}>
+                          {importStatusLabel(row.status)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 p-4 flex gap-2.5">
+              {importPreview.result ? (
+                <button
+                  type="button"
+                  onClick={() => setImportPreview(null)}
+                  className="btn-primary w-full"
+                >
+                  Done
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={importing}
+                    onClick={() => setImportPreview(null)}
+                    className="btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={importing || importPreview.summary.ready === 0}
+                    onClick={handleConfirmImport}
+                    className="btn-primary flex-1"
+                  >
+                    {importing
+                      ? "Importing..."
+                      : importPreview.summary.ready === 0
+                        ? "Nothing to import"
+                        : `Import ${importPreview.summary.ready} product${importPreview.summary.ready === 1 ? "" : "s"}`}
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
         </div>
       )}
 

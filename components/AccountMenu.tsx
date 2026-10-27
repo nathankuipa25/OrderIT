@@ -27,11 +27,28 @@ export default function AccountMenu({
   }, []);
 
   async function handleLogout() {
+    if (
+      role === "SHOP" &&
+      !window.confirm(
+        "Logging out will not delete orders saved on this device. Any unsynced orders will stay here and can sync after you sign in to the same shop again. Continue?"
+      )
+    ) {
+      return;
+    }
     setLoggingOut(true);
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("Logout could not be completed.");
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready.catch(() => null);
+        (navigator.serviceWorker.controller || registration?.active)?.postMessage({
+          type: "SET_SIGNED_OUT",
+        });
+      }
       router.push("/login");
       router.refresh();
+    } catch {
+      window.alert("Could not log out. Check your connection and try again.");
     } finally {
       setLoggingOut(false);
     }

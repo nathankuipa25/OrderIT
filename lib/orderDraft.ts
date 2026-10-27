@@ -1,26 +1,31 @@
 "use client";
 
-// Simple in-memory + sessionStorage-backed draft of the order being created.
-// Survives client-side navigation between /orders/new and /orders/new/review.
+import {
+  buildOrderRequest,
+  readDraftIntent,
+  removeDraftIntent,
+  writeDraftIntent,
+  type OrderDraftIntent,
+} from "./order-draft.mjs";
 
-const KEY = "orderit:draft";
+export { buildOrderRequest };
 
 export function getDraft(): string[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = window.sessionStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  return getDraftIntent()?.productIds ?? [];
+}
+
+export function getDraftIntent(): OrderDraftIntent | null {
+  if (typeof window === "undefined") return null;
+  return readDraftIntent(window.localStorage, window.sessionStorage);
 }
 
 export function setDraft(ids: string[]) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(KEY, JSON.stringify(ids));
+  writeDraftIntent(window.localStorage, ids, window.sessionStorage);
 }
 
 export function clearDraft() {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(KEY);
+  removeDraftIntent(window.localStorage, window.sessionStorage);
 }

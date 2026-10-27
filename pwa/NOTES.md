@@ -1,38 +1,7 @@
-PWA and TWA updates
+# OrderIT PWA notes
 
-I added the following changes for full PWA/TWA support and automated checks:
+OrderIT uses a small custom module service worker; it does not use `next-pwa` or Workbox. Do not add `next-pwa` as a build prerequisite. The worker caches the public offline shell and versioned Next.js assets only. Private API responses and authenticated page HTML are network-only. The offline shop workspace is a static shell that reads its shop data from an account-partitioned IndexedDB database.
 
-1) PNG placeholders
-- public/icons/icon-192.png
-- public/icons/icon-512.png
+The install manifest starts at `/offline.html`. Regular and maskable Android icons are separate 192×192 and 512×512 PNG files, with a source SVG, 180×180 Apple touch icon, favicon PNGs/ICO, and responsive iPhone/iPad launch artwork. Android's installed-PWA splash is platform-generated from manifest metadata and icon assets; the iOS startup-image links may be ignored on some iOS versions.
 
-NOTE: These are tiny placeholder files. Replace them with real 192x192 and 512x512 maskable PNGs for proper installability.
-
-2) next-pwa integration
-- next.config.mjs updated to use next-pwa. You MUST install the dependency before building:
-
-  npm install next-pwa
-
-This will generate the Workbox precache into /public during production builds. Configuration disables PWA in non-production to avoid SW issues during development.
-
-3) GitHub Actions Lighthouse check
-- .github/workflows/lighthouse.yml runs on pushes and PRs to main. It:
-  - installs deps
-  - builds the app
-  - starts the production server (npm run start)
-  - runs Lighthouse against http://localhost:3000
-  - uploads the HTML report as an artifact
-
-Important notes & next steps
-- Install next-pwa as noted above.
-- Replace the PNG placeholders with actual app icons (192 & 512) and a maskable PNG for best Android support.
-- Ensure your start script in package.json serves the production build on port 3000 (Next's default). Example package.json scripts:
-  "build": "next build",
-  "start": "next start -p 3000"
-
-- On hosting platforms (Vercel) you may prefer to disable next-pwa and use a separate Workbox build — next-pwa works with Vercel but ensure you test.
-
-If you want, I can:
-- Commit optimized real PNG placeholders I can generate for you.
-- Add an alternate Lighthouse workflow that runs against a deployed preview URL (requires deployment step).
-- Add Bubblewrap config or sample Android project for TWA packaging.
+Run `npm test` for the repository behavior tests. Offline-specific tests use an IndexedDB test double and an emulated service-worker fetch handler; they do not verify a browser installation, native launch screen, real background sync, or real-device behavior. Follow the real-device checklist in [PHASE6-OFFLINE.md](./PHASE6-OFFLINE.md) before describing those behaviors as verified.

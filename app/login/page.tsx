@@ -21,6 +21,19 @@ export default function LoginPage() {
     setSubmitting(true);
     setError("");
     try {
+      const activeResponse = await fetch("/api/auth/me", { cache: "no-store" });
+      if (activeResponse.ok) {
+        const active = await activeResponse.json();
+        if (
+          active?.user?.role === "SHOP" &&
+          !window.confirm(
+            "Signing into another account will not delete this shop's offline orders. They will stay on this device and be hidden until you sign back into the same shop. Continue?"
+          )
+        ) {
+          setSubmitting(false);
+          return;
+        }
+      }
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -33,6 +46,10 @@ export default function LoginPage() {
         return;
       }
       const next = searchParams.get("next") || "/";
+      if (next === "/offline.html") {
+        window.location.assign(next);
+        return;
+      }
       router.push(next);
       router.refresh();
     } catch {
@@ -97,6 +114,9 @@ export default function LoginPage() {
           Register your shop
         </Link>
       </div>
+      <p className="text-center text-xs text-muted mt-4">
+        Offline orders stay on this device after logout or account changes. Sign in to the same shop again to access and sync them.
+      </p>
     </div>
   );
 }

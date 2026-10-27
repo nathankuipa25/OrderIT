@@ -1,24 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import {
+  evaluateAdminAccess,
+  evaluateProductDeletion,
+} from "@/lib/order-business.mjs";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Please log in." }, { status: 401 });
+  const access = evaluateAdminAccess(session);
+  if (!access.allowed) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   try {
     const product = await prisma.product.findUnique({
       where: { id: params.id },
+      include: { _count: { select: { items: true } } },
     });
     if (!product) {
       return NextResponse.json({ error: "Product not found." }, { status: 404 });
     }
-    return NextResponse.json({ product });
+    const { _count, ...details } = product;
+    return NextResponse.json({
+      product: { ...details, usageCount: _count.items },
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
@@ -72,6 +82,56 @@ export async function PATCH(
     console.error(err);
     return NextResponse.json(
       { error: "Something went wrong. Your changes weren't saved." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const session = await getSession();
+  const access = evaluateAdminAccess(session);
+  if (!access.allowed) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
+
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: params.id },
+      include: { _count: { select: { items: true } } },
+    });
+    const deletion = evaluateProductDeletion(product);
+    if (!deletion.allowed) {
+      return NextResponse.json(
+        {
+          error: deletion.error,
+          ...(deletion.status === 409 ? { usageCount: deletion.usageCount } : {}),
+        },
+        { status: deletion.status }
+      );
+    }
+
+    await prisma.product.delete({ where: { id: params.id } });
+    return NextResponse.json({ deleted: true, id: params.id });
+  } catch (err) {
+    // The foreign key is the final guard if an order references the product
+    // after the usage count was checked.
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2003"
+    ) {
+      return NextResponse.json(
+        {
+          error: "This product became part of order history and cannot be deleted. Deactivate it instead.",
+        },
+        { status: 409 }
+      );
+    }
+    console.error(err);
+    return NextResponse.json(
+      { error: "Something went wrong. The product wasn't deleted." },
       { status: 500 }
     );
   }
