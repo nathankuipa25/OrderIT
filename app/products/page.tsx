@@ -6,6 +6,11 @@ import EmptyState from "@/components/EmptyState";
 import Skeleton from "@/components/Skeleton";
 import Toast from "@/components/Toast";
 import { getLoadState } from "@/lib/load-state.mjs";
+import {
+  summarizeProductSelection,
+  toggleLoadedProductSelection,
+  toggleProductSelection,
+} from "@/lib/product-selection.mjs";
 
 type Product = { id: string; name: string; active: boolean };
 type ImportRow = {
@@ -68,15 +73,20 @@ export default function ProductsPage() {
   latestQueryRef.current = debouncedQuery;
 
   const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedProductsById, setSelectedProductsById] = useState<Map<string, string>>(
+    new Map()
+  );
   const [bulkBusy, setBulkBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [toast, setToast] = useState<{ message: string; variant: "success" | "error" } | null>(
     null
   );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const selectionSummary = summarizeProductSelection(selectedProductsById);
+  const selectedIds = new Set(selectionSummary.ids);
 
   function showToast(message: string, variant: "success" | "error" = "success") {
     setToast({ message, variant });
@@ -170,17 +180,16 @@ export default function ProductsPage() {
   }, [hasMore, fetchPage, error]);
 
   function toggleSelectMode() {
+    if (selectMode) setSelectedProductsById(new Map());
     setSelectMode((v) => !v);
-    setSelectedIds(new Set());
   }
 
-  function toggleSelected(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function toggleSelected(id: string, name: string) {
+    setSelectedProductsById((prev) => toggleProductSelection(prev, { id, name }));
+  }
+
+  function toggleAllLoadedProducts() {
+    setSelectedProductsById((prev) => toggleLoadedProductSelection(prev, products));
   }
 
   async function handleBulkSetActive(active: boolean) {
@@ -200,10 +209,38 @@ export default function ProductsPage() {
         }`
       );
       setSelectMode(false);
-      setSelectedIds(new Set());
+      setSelectedProductsById(new Map());
       fetchPage({ reset: true });
     } catch {
       showToast("Something went wrong. Products weren't updated.", "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/products/bulk-delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "The selected products weren't deleted.");
+      showToast(`Deleted ${data.deleted} product${data.deleted === 1 ? "" : "s"}.`);
+      setDeleteConfirmOpen(false);
+      setSelectedProductsById(new Map());
+      setSelectMode(false);
+      fetchPage({ reset: true });
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. The selected products weren't deleted.",
+        "error"
+      );
     } finally {
       setBulkBusy(false);
     }
@@ -321,12 +358,15 @@ export default function ProductsPage() {
     error: Boolean(error && products.length === 0),
     itemCount: products.length,
   });
+  const allLoadedSelected =
+    products.length > 0 && products.every((product) => selectedProductsById.has(product.id));
+  const someLoadedSelected = products.some((product) => selectedProductsById.has(product.id));
 
   return (
     <div className={selectMode && selectedIds.size > 0 ? "pb-40" : "pb-10"}>
       <header className="flex items-center justify-between py-2 mb-5 gap-2">
         <div className="text-2xl font-bold">
-          {selectMode ? `${selectedIds.size} selected` : "Products"}
+          {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Products"}
         </div>
         <div className="flex items-center gap-3">
           {selectMode ? (
@@ -334,7 +374,7 @@ export default function ProductsPage() {
               onClick={toggleSelectMode}
               className="text-navy font-semibold text-sm"
             >
-              Cancel
+              Done
             </button>
           ) : (
             <>
@@ -377,8 +417,28 @@ export default function ProductsPage() {
         className="hidden"
       />
 
-      {!selectMode && (
-        <div className="relative mb-5">
+      {selectMode && products.length > 0 && (
+        <div className="card mb-4 flex items-center justify-between gap-3 px-4 py-3">
+          <label className="flex min-h-[44px] items-center gap-3 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={allLoadedSelected}
+              ref={(input) => {
+                if (input) input.indeterminate = someLoadedSelected && !allLoadedSelected;
+              }}
+              onChange={toggleAllLoadedProducts}
+              aria-label={`Select all ${products.length} loaded products`}
+              className="h-5 w-5 accent-teal-600"
+            />
+            <span>Select all {products.length} loaded products</span>
+          </label>
+          <span className="shrink-0 text-sm text-muted" aria-live="polite">
+            {selectedIds.size} selected
+          </span>
+        </div>
+      )}
+
+      <div className="relative mb-5">
           <svg
             width="18"
             height="18"
@@ -401,8 +461,7 @@ export default function ProductsPage() {
             placeholder="Search products..."
             className="w-full h-12 pl-11 pr-4 rounded-xl border border-gray-200 bg-white text-[15px] outline-none focus:border-accent"
           />
-        </div>
-      )}
+      </div>
 
       {error && products.length > 0 && failedPage === "initial" && (
         <div role="alert" className="text-sm text-danger mb-4">
@@ -457,29 +516,8 @@ export default function ProductsPage() {
           <div className="flex flex-col gap-2.5">
             {products.map((p) => {
               const row = (
-                <>
-                  <div className="flex items-center gap-3 min-w-0">
-                    {selectMode && (
-                      <span
-                        className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
-                          selectedIds.has(p.id)
-                            ? "bg-accent border-accent"
-                            : "border-gray-300"
-                        }`}
-                      >
-                        {selectedIds.has(p.id) && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                            <path
-                              d="M5 13l4 4L19 7"
-                              stroke="white"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
-                      </span>
-                    )}
+                <div className="flex w-full min-w-0 items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="min-w-0">
                       <div className="font-medium text-ink truncate">{p.name}</div>
                       <div
@@ -502,20 +540,23 @@ export default function ProductsPage() {
                       />
                     </svg>
                   )}
-                </>
+                </div>
               );
 
               return selectMode ? (
-                <button
+                <label
                   key={p.id}
-                  type="button"
-                  onClick={() => toggleSelected(p.id)}
-                  aria-pressed={selectedIds.has(p.id)}
-                  aria-label={`${p.name}, ${selectedIds.has(p.id) ? "selected" : "not selected"}`}
-                  className="card flex items-center justify-between px-4 py-3.5 min-h-[44px] text-left"
+                  className="card flex min-h-[52px] cursor-pointer items-center gap-3 px-4 py-3.5 text-left"
                 >
+                  <input
+                    type="checkbox"
+                    checked={selectedProductsById.has(p.id)}
+                    onChange={() => toggleSelected(p.id, p.name)}
+                    aria-label={`Select ${p.name}`}
+                    className="h-5 w-5 shrink-0 accent-teal-600"
+                  />
                   {row}
-                </button>
+                </label>
               ) : (
                 <Link
                   key={p.id}
@@ -566,22 +607,80 @@ export default function ProductsPage() {
 
       {selectMode && selectedIds.size > 0 && (
         <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-white border-t border-gray-100 md:bottom-0 md:pl-56">
-          <div className="page-container px-4 py-3 flex gap-2.5">
+          <div className="page-container px-4 py-3 flex gap-2">
             <button
+              type="button"
               onClick={() => handleBulkSetActive(true)}
               disabled={bulkBusy}
-              className="btn-secondary flex-1"
+              className="btn-secondary flex-1 px-2 text-sm"
             >
               {bulkBusy ? "Updating..." : "Activate"}
             </button>
             <button
+              type="button"
               onClick={() => handleBulkSetActive(false)}
               disabled={bulkBusy}
-              className="btn-primary flex-1"
+              className="btn-primary flex-1 px-2 text-sm"
             >
               {bulkBusy ? "Updating..." : "Deactivate"}
             </button>
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={bulkBusy}
+              className="flex-1 rounded-xl bg-red-600 px-2 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Delete selected
+            </button>
           </div>
+        </div>
+      )}
+
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bulk-delete-title"
+            aria-describedby="bulk-delete-description"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && !bulkBusy) setDeleteConfirmOpen(false);
+            }}
+            className="w-full max-w-lg rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+          >
+            <h2 id="bulk-delete-title" className="text-lg font-bold text-ink">
+              Delete {selectionSummary.count} selected product{selectionSummary.count === 1 ? "" : "s"} from the catalog?
+            </h2>
+            <p id="bulk-delete-description" className="mt-2 text-sm text-muted">
+              Scope: {selectionSummary.scope} ({selectionSummary.count}). Search filters and loaded pages do not change this selection. Products used in order history cannot be deleted; if any selected product is protected or missing, none will be deleted.
+            </p>
+            <ul className="mt-3 max-h-40 overflow-y-auto rounded-xl bg-gray-50 px-4 py-2 text-sm text-ink">
+              {selectionSummary.products.map((product) => (
+                <li key={product.id} className="py-1">
+                  {product.name}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 flex gap-2.5">
+              <button
+                type="button"
+                autoFocus
+                disabled={bulkBusy}
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy || selectionSummary.count === 0}
+                onClick={handleBulkDelete}
+                className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-semibold text-white disabled:opacity-50"
+              >
+                {bulkBusy ? "Deleting..." : `Delete ${selectionSummary.count} product${selectionSummary.count === 1 ? "" : "s"}`}
+              </button>
+            </div>
+          </section>
         </div>
       )}
 
