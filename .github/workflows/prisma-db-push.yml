@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "prisma/schema.prisma"
+      - "prisma/migrations/**"
   workflow_dispatch: {}
 
 jobs:
@@ -22,15 +23,18 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Check migration workflow contract
+        run: node --test tests/prisma-db-push-workflow.test.mjs
+
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Push schema to database
-        run: npx prisma db push
+      - name: Apply approved additive SQL migration
+        run: npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20261027125000_add_order_idempotency_key/migration.sql
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Seed demo products only (no user accounts)
-        run: npm run db:seed
+      - name: Push schema to database
+        run: npx prisma db push
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
