@@ -1,0 +1,42 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.orderit.shop'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.orderit.shop'
+        minSdk 23
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+
+        def shopAppUrl = providers.gradleProperty('shopAppUrl')
+            .orElse(providers.environmentVariable('ORDERIT_SHOP_APP_URL'))
+            .orElse('https://orderit-ruddy.vercel.app/')
+            .get()
+        buildConfigField 'String', 'SHOP_APP_URL', '"' + shopAppUrl.replace('"', '\\"') + '"'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
