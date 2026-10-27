@@ -108,12 +108,17 @@ test("transaction-scoped allocation lock serializes mocked concurrent callers", 
     let release;
     const tx = {
       async $queryRaw(strings) {
-        assert.match(strings[0], /pg_advisory_xact_lock\(5194820, 1\)/);
+        assert.match(
+          strings[0],
+          /^SELECT pg_advisory_xact_lock\(5194820, 1\) IS NULL AS lock_acquired$/
+        );
         const previous = lockQueue;
         let unlock;
         lockQueue = new Promise((resolve) => { unlock = resolve; });
         await previous;
         release = unlock;
+        // Prisma should deserialize this boolean projection, not PostgreSQL's void.
+        return [{ lock_acquired: true }];
       },
       order: {
         async findFirst() {
