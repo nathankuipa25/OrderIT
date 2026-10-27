@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import {
+  allocateNextOrderNumber,
+  parseIdempotencyKey,
+  resolveIdempotencyReplay,
+  validateProductAvailability,
+  validateProductIdList,
+} from "@/lib/order-business.mjs";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -11,6 +18,49 @@ export async function GET(req: NextRequest) {
 
   const params = req.nextUrl.searchParams;
   const isAdmin = session.role === "ADMIN";
+  if (params.get("sync") === "1") {
+    if (session.role !== "SHOP") {
+      return NextResponse.json(
+        { error: "Offline sync is available to shop accounts only." },
+        { status: 403 }
+      );
+    }
+    const take = Number(params.get("take") || 100);
+    const skip = Number(params.get("skip") || 0);
+    if (!Number.isInteger(take) || take < 1 || take > 100 || !Number.isInteger(skip) || skip < 0) {
+      return NextResponse.json({ error: "Invalid sync page." }, { status: 400 });
+    }
+    try {
+      const rows = await prisma.order.findMany({
+        where: { userId: session.sub },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: take + 1,
+        skip,
+        select: {
+          id: true,
+          orderNumber: true,
+          createdAt: true,
+          idempotencyKey: true,
+          items: {
+            orderBy: { position: "asc" },
+            select: {
+              productId: true,
+              position: true,
+              product: { select: { name: true } },
+            },
+          },
+        },
+      });
+      const hasMore = rows.length > take;
+      return NextResponse.json({ orders: hasMore ? rows.slice(0, take) : rows, hasMore });
+    } catch (err) {
+      console.error(err);
+      return NextResponse.json(
+        { error: "Something went wrong loading orders for offline sync." },
+        { status: 500 }
+      );
+    }
+  }
   const takeParam = params.get("take");
 
   try {
@@ -71,40 +121,60 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const productIds: string[] = Array.isArray(body?.productIds)
-      ? body.productIds
-      : [];
-
-    if (productIds.length === 0) {
+    const selection = validateProductIdList(body?.productIds);
+    if (!selection.ok) {
       return NextResponse.json(
-        { error: "Select at least one product." },
-        { status: 400 }
+        { error: selection.error },
+        { status: selection.status }
       );
     }
-
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
-    });
-    if (products.length !== productIds.length) {
-      return NextResponse.json(
-        { error: "One or more selected products are invalid." },
-        { status: 400 }
-      );
+    const ids = selection.productIds;
+    const keyValidation = parseIdempotencyKey(body);
+    if (!keyValidation.ok) {
+      return NextResponse.json({ error: keyValidation.error }, { status: 400 });
     }
+    const idempotencyKey = keyValidation.key;
 
+    let replayed = false;
     const order = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const last = await tx.order.findFirst({
-        orderBy: { orderNumber: "desc" },
-        select: { orderNumber: true },
+      const nextNumber = await allocateNextOrderNumber(tx);
+
+      if (idempotencyKey) {
+        const existing = await tx.order.findUnique({
+          where: { idempotencyKey },
+          include: {
+            items: { include: { product: true }, orderBy: { position: "asc" } },
+          },
+        });
+        const decision = resolveIdempotencyReplay(existing, session.sub, ids);
+        if (decision.kind === "conflict") {
+          throw new OrderRequestError(decision.message, 409);
+        }
+        if (decision.kind === "replay") {
+          replayed = true;
+          return decision.order;
+        }
+      }
+
+      // Lock the selected catalog rows before checking status so a concurrent
+      // deactivation cannot slip between validation and order creation.
+      await tx.$queryRaw`SELECT id FROM "Product" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR SHARE`;
+      const products = await tx.product.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, active: true },
       });
-      const nextNumber = (last?.orderNumber ?? 0) + 1;
+      const availability = validateProductAvailability(ids, products);
+      if (!availability.ok) {
+        throw new OrderRequestError(availability.error, availability.status);
+      }
 
       return tx.order.create({
         data: {
           orderNumber: nextNumber,
           userId: session.sub,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
           items: {
-            create: productIds.map((productId, position) => ({
+            create: ids.map((productId, position) => ({
               productId,
               position,
             })),
@@ -116,12 +186,22 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    return NextResponse.json({ order }, { status: 201 });
+    return NextResponse.json({ order }, { status: replayed ? 200 : 201 });
   } catch (err) {
+    if (err instanceof OrderRequestError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error(err);
     return NextResponse.json(
       { error: "Something went wrong. Your order wasn't created." },
       { status: 500 }
     );
+  }
+}
+
+class OrderRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "OrderRequestError";
   }
 }

@@ -81,8 +81,10 @@ export default function OrdersInfiniteList({
       setOrders((prev) => [...prev, ...newOrders]);
       setHasMore(Boolean(data.hasMore));
       skipRef.current += newOrders.length;
-    } catch {
-      setError("Couldn't load more orders. Scroll to retry.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn't load more orders."
+      );
     } finally {
       loadingRef.current = false;
       setLoadingMore(false);
@@ -95,13 +97,13 @@ export default function OrdersInfiniteList({
     if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) loadMore();
+        if (entries[0].isIntersecting && !error) loadMore();
       },
       { rootMargin: "300px" }
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [loadMore]);
+  }, [loadMore, error]);
 
   if (orders.length === 0) {
     return (
@@ -149,17 +151,38 @@ export default function OrdersInfiniteList({
       ))}
 
       {hasMore && (
-        <div ref={sentinelRef} className="flex flex-col gap-3">
+        <>
+          <div ref={sentinelRef} aria-hidden="true" className="h-px" />
           {loadingMore && (
-            <>
+            <div role="status" aria-busy="true" aria-label="Loading more orders" className="flex flex-col gap-3">
               <Skeleton className="h-[76px]" />
               <Skeleton className="h-[76px]" />
-            </>
+            </div>
           )}
-        </div>
+          {error && (
+            <div role="alert" className="text-sm text-danger text-center">
+              <p>{error}</p>
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="btn-secondary mt-3 px-4"
+              >
+                Retry loading more orders
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            aria-busy={loadingMore}
+            className="btn-secondary w-full"
+          >
+            {loadingMore ? "Loading more orders…" : "Load more orders"}
+          </button>
+        </>
       )}
-
-      {error && <div className="text-sm text-danger text-center">{error}</div>}
     </div>
   );
 }

@@ -6,13 +6,19 @@ import { CSS } from "@dnd-kit/utilities";
 export default function SortableProductRow({
   id,
   index,
+  total,
   name,
   onRemove,
+  onMoveUp,
+  onMoveDown,
 }: {
   id: string;
   index: number;
+  total: number;
   name: string;
   onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
@@ -27,16 +33,17 @@ export default function SortableProductRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center justify-between py-3 bg-white"
+      className="flex items-center justify-between gap-2 py-3 bg-white"
     >
       <div className="flex items-center gap-1 min-w-0">
         <button
+          type="button"
           {...attributes}
           {...listeners}
-          aria-label={`Reorder ${name}`}
-          className="w-8 h-8 -ml-1.5 flex items-center justify-center text-gray-300 shrink-0 touch-none cursor-grab active:cursor-grabbing"
+          aria-label={`Drag to reorder ${name}, position ${index + 1} of ${total}`}
+          className="w-8 h-8 -ml-1.5 flex items-center justify-center text-gray-400 shrink-0 touch-none cursor-grab active:cursor-grabbing rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none">
             <circle cx="8" cy="6" r="1.6" fill="currentColor" />
             <circle cx="8" cy="12" r="1.6" fill="currentColor" />
             <circle cx="8" cy="18" r="1.6" fill="currentColor" />
@@ -50,13 +57,34 @@ export default function SortableProductRow({
           {name}
         </span>
       </div>
-      <button
-        onClick={onRemove}
-        aria-label={`Remove ${name}`}
-        className="w-8 h-8 flex items-center justify-center text-muted text-lg shrink-0"
-      >
-        ×
-      </button>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={onMoveUp}
+          disabled={index === 0}
+          aria-label={`Move ${name} up`}
+          className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-navy disabled:opacity-40"
+        >
+          <span aria-hidden="true">↑</span>
+        </button>
+        <button
+          type="button"
+          onClick={onMoveDown}
+          disabled={index === total - 1}
+          aria-label={`Move ${name} down`}
+          className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-navy disabled:opacity-40"
+        >
+          <span aria-hidden="true">↓</span>
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${name}`}
+          className="w-8 h-9 flex items-center justify-center text-muted text-lg"
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }

@@ -37,6 +37,7 @@ model Order {
   id          String      @id @default(cuid())
   orderNumber Int         @unique
   createdAt   DateTime    @default(now())
+  idempotencyKey String?  @unique
   items       OrderItem[]
 
   // Optional so pre-existing orders (created before accounts existed)

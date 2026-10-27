@@ -8,6 +8,7 @@ import ProductRow from "@/components/ProductRow";
 import Skeleton from "@/components/Skeleton";
 import Toast from "@/components/Toast";
 import { getDraft, setDraft } from "@/lib/orderDraft";
+import { getLoadState } from "@/lib/load-state.mjs";
 
 type Product = { id: string; name: string; active: boolean };
 
@@ -19,7 +20,7 @@ export default function CreateOrderPage() {
     null
   );
 
-  const { data, error: fetchError } = useSWR<{ products: Product[] }>(
+  const { data, error: fetchError, mutate } = useSWR<{ products: Product[] }>(
     "/api/products?active=true",
     {
       // The catalog rarely changes mid-session; avoid refetching every
@@ -54,6 +55,11 @@ export default function CreateOrderPage() {
     if (!q) return products;
     return products.filter((p) => p.name.toLowerCase().includes(q));
   }, [products, query]);
+  const loadState = getLoadState({
+    loading: !data && !fetchError,
+    error: Boolean(fetchError && !data),
+    itemCount: filtered.length,
+  });
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -109,6 +115,7 @@ export default function CreateOrderPage() {
           />
         </svg>
         <input
+          aria-label="Search products"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search products..."
@@ -116,17 +123,30 @@ export default function CreateOrderPage() {
         />
       </div>
 
-      {error && (
-        <div className="text-sm text-danger mb-4">{error}</div>
+      {fetchError && data && (
+        <div role="alert" className="text-sm text-danger mb-4">
+          <p>{error}</p>
+          <button type="button" onClick={() => mutate()} className="btn-secondary mt-3 px-4">
+            Retry loading products
+          </button>
+        </div>
       )}
 
-      {products === null ? (
-        <div className="flex flex-col gap-2.5">
+      {loadState === "loading" ? (
+        <div role="status" aria-busy="true" aria-label="Loading products" className="flex flex-col gap-2.5">
           {[...Array(6)].map((_, i) => (
             <Skeleton key={i} className="h-[52px]" />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : loadState === "error" ? (
+        <div role="alert" className="card p-5 text-center">
+          <div className="font-semibold text-ink">Products couldn&rsquo;t load</div>
+          <p className="text-sm text-muted mt-1">{error}</p>
+          <button type="button" onClick={() => mutate()} className="btn-primary w-full mt-4">
+            Retry loading products
+          </button>
+        </div>
+      ) : loadState === "empty" ? (
         <div className="text-center py-10">
           <div className="font-semibold text-ink">No products found</div>
           <div className="text-sm text-muted mt-1">
@@ -147,9 +167,9 @@ export default function CreateOrderPage() {
       )}
 
       {selected.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 md:pl-56">
-          <div className="page-container px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] mb-16 md:mb-0">
-            <div className="text-sm text-muted mb-2 text-center">
+        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 bg-white border-t border-gray-100 md:bottom-0 md:pl-56">
+          <div className="page-container px-4 py-3 md:mb-0">
+            <div role="status" className="text-sm text-muted mb-2 text-center">
               {selected.size} product{selected.size === 1 ? "" : "s"} selected
             </div>
             <button onClick={goToReview} className="btn-primary w-full">

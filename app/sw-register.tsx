@@ -2,17 +2,21 @@
 
 import { useEffect } from 'react';
 
-export default function SWRegister() {
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/service-worker.js')
-        .then((reg) => {
-          console.log('Service worker registered', reg);
-        })
-        .catch((err) => console.warn('Service worker registration failed', err));
-    }
-  }, []);
+type Role = "ADMIN" | "SHOP";
 
+export default function SWRegister({ role, userId }: { role?: Role; userId?: string }) {
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    let cancelled = false;
+    navigator.serviceWorker
+      .register("/service-worker.js", { type: "module" })
+      .then(async (registration) => {
+        if (cancelled || role !== "ADMIN" || !userId) return;
+        const ready = await navigator.serviceWorker.ready;
+        ready.active?.postMessage({ type: "SYNC_NOW" });
+      })
+      .catch((error) => console.warn("OrderIT offline worker registration failed", error));
+    return () => { cancelled = true; };
+  }, [role, userId]);
   return null;
 }

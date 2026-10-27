@@ -12,6 +12,7 @@ function getNavItems(role?: Role) {
   ];
   if (role === "ADMIN") {
     items.push({ href: "/products", label: "Products", icon: ProductsIcon });
+    items.push({ href: "/admin/reset", label: "Reset", icon: ResetIcon });
   }
   return items;
 }
@@ -32,15 +33,16 @@ export default function BottomNav({ role }: { role?: Role }) {
   return (
     <>
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 md:hidden">
-        <div className="max-w-md mx-auto flex items-stretch">
+      <nav aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 pb-[env(safe-area-inset-bottom)] md:hidden">
+        <div className="max-w-md mx-auto flex items-stretch min-h-14">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(pathname, href);
             return (
               <Link
                 key={href}
                 href={href}
-                className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5"
+                aria-current={active ? "page" : undefined}
+                className="flex-1 flex flex-col items-center justify-center gap-1 py-1.5"
               >
                 <Icon active={active} />
                 <span
@@ -57,7 +59,7 @@ export default function BottomNav({ role }: { role?: Role }) {
       </nav>
 
       {/* Desktop sidebar */}
-      <nav className="hidden md:flex md:flex-col md:fixed md:top-0 md:left-0 md:h-full md:w-56 md:border-r md:border-gray-100 md:bg-white md:px-4 md:py-6">
+      <nav aria-label="Main navigation" className="hidden md:flex md:flex-col md:fixed md:top-0 md:left-0 md:h-full md:w-56 md:border-r md:border-gray-100 md:bg-white md:px-4 md:py-6">
         <div className="text-xl font-bold text-navy px-2 mb-8">OrderIT</div>
         <div className="flex flex-col gap-1">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
@@ -66,6 +68,7 @@ export default function BottomNav({ role }: { role?: Role }) {
               <Link
                 key={href}
                 href={href}
+                aria-current={active ? "page" : undefined}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium ${
                   active ? "bg-accent-light text-navy" : "text-muted hover:bg-surface"
                 }`}
@@ -130,6 +133,20 @@ function ProductsIcon({ active }: { active: boolean }) {
         d="M3.5 8l8.5 4.5 8.5-4.5M12 12.5V20.5"
         stroke={active ? "#0f2340" : "#6b7280"}
         strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ResetIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M20 7v5h-5M4.5 10a7.5 7.5 0 0 1 13-3L20 12M4 17v-5h5m10.5 2a7.5 7.5 0 0 1-13 3L4 12"
+        stroke={active ? "#0f2340" : "#6b7280"}
+        strokeWidth="1.8"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>

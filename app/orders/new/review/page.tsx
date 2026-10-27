@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   DndContext,
   DragEndEvent,
+  KeyboardSensor,
   PointerSensor,
   TouchSensor,
   closestCenter,
@@ -14,15 +15,23 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
   verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
-import { getDraft, setDraft, clearDraft } from "@/lib/orderDraft";
+import {
+  buildOrderRequest,
+  getDraft,
+  getDraftIntent,
+  setDraft,
+  clearDraft,
+} from "@/lib/orderDraft";
 import OrderDocument from "@/components/OrderDocument";
 import Skeleton from "@/components/Skeleton";
 import Toast from "@/components/Toast";
 import SortableProductRow from "@/components/SortableProductRow";
 import { useOrderExport } from "@/lib/useOrderExport";
+import { getLoadState } from "@/lib/load-state.mjs";
+import { moveItem } from "@/lib/order-reorder.mjs";
 
 type Product = { id: string; name: string };
 
@@ -32,6 +41,8 @@ export default function ReviewOrderPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState("");
   const [shopName, setShopName] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -42,25 +53,38 @@ export default function ReviewOrderPage() {
   }, []);
 
   useEffect(() => {
-    const ids = getDraft();
-    if (ids.length === 0) {
-      router.replace("/orders/new");
-      return;
-    }
-    fetch("/api/products")
-      .then((r) => r.json())
-      .then((data) => {
+    let cancelled = false;
+    async function loadSelection() {
+      setLoading(true);
+      setError("");
+      const ids = getDraft();
+      if (ids.length === 0) {
+        router.replace("/orders/new");
+        return;
+      }
+      try {
+        const response = await fetch("/api/products");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load products.");
         const all: Product[] = data.products ?? [];
         const map = new Map(all.map((p) => [p.id, p]));
         const ordered = ids.map((id) => map.get(id)).filter(Boolean) as Product[];
-        setItems(ordered);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Something went wrong loading your selection.");
-        setLoading(false);
-      });
-  }, [router]);
+        if (!cancelled) setItems(ordered);
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Something went wrong loading your selection."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadSelection();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, retryCount]);
 
   function removeItem(id: string) {
     setItems((prev) => {
@@ -75,8 +99,23 @@ export default function ReviewOrderPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(TouchSensor, {
       activationConstraint: { delay: 150, tolerance: 5 },
-    })
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  function moveProduct(id: string, offset: -1 | 1) {
+    setItems((prev) => {
+      const fromIndex = prev.findIndex((p) => p.id === id);
+      const toIndex = fromIndex + offset;
+      const next = moveItem(prev, fromIndex, toIndex);
+      if (next === prev) return prev;
+      setDraft(next.map((p) => p.id));
+      setReorderAnnouncement(
+        `${next[toIndex].name} moved to position ${toIndex + 1} of ${next.length}.`
+      );
+      return next;
+    });
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -85,8 +124,11 @@ export default function ReviewOrderPage() {
       const oldIndex = prev.findIndex((p) => p.id === active.id);
       const newIndex = prev.findIndex((p) => p.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return prev;
-      const next = arrayMove(prev, oldIndex, newIndex);
+      const next = moveItem(prev, oldIndex, newIndex);
       setDraft(next.map((p) => p.id));
+      setReorderAnnouncement(
+        `${next[newIndex].name} moved to position ${newIndex + 1} of ${next.length}.`
+      );
       return next;
     });
   }
@@ -95,10 +137,21 @@ export default function ReviewOrderPage() {
     setSubmitting(true);
     setError("");
     try {
+      const productIds = items.map((p) => p.id);
+      const savedIntent = getDraftIntent();
+      if (
+        !savedIntent ||
+        savedIntent.productIds.length !== productIds.length ||
+        savedIntent.productIds.some((id, index) => id !== productIds[index])
+      ) {
+        setDraft(productIds);
+      }
+      const requestBody = buildOrderRequest(getDraftIntent(), productIds);
+      if (!requestBody) throw new Error("Your order draft could not be saved. Please try again.");
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productIds: items.map((p) => p.id) }),
+        body: JSON.stringify(requestBody),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -123,9 +176,17 @@ export default function ReviewOrderPage() {
       title: shopName,
       filenameBase: "order-preview",
     });
+  const loadState = getLoadState({
+    loading,
+    error: Boolean(error && items.length === 0),
+    itemCount: items.length,
+  });
 
   return (
-    <div className="pb-28">
+    <div className="pb-40">
+      <div className="sr-only" role="status" aria-live="polite">
+        {reorderAnnouncement}
+      </div>
       <header className="flex items-center gap-3 py-2 mb-4">
         <Link
           href="/orders/new"
@@ -145,11 +206,31 @@ export default function ReviewOrderPage() {
         <div className="text-xl font-bold">Review Order</div>
       </header>
 
-      {loading ? (
-        <div className="flex flex-col gap-2.5">
+      {loadState === "loading" ? (
+        <div role="status" aria-busy="true" aria-label="Loading your order selection" className="flex flex-col gap-2.5">
           {[...Array(4)].map((_, i) => (
             <Skeleton key={i} className="h-12" />
           ))}
+        </div>
+      ) : loadState === "error" ? (
+        <div role="alert" className="card p-5 text-center">
+          <div className="font-semibold text-ink">Your selection couldn&rsquo;t load</div>
+          <p className="text-sm text-muted mt-1">{error}</p>
+          <button
+            type="button"
+            onClick={() => setRetryCount((count) => count + 1)}
+            className="btn-primary w-full mt-4"
+          >
+            Retry loading your selection
+          </button>
+        </div>
+      ) : loadState === "empty" ? (
+        <div className="card p-5 text-center">
+          <div className="font-semibold text-ink">No selected products found</div>
+          <p className="text-sm text-muted mt-1">Choose products again to continue this order.</p>
+          <Link href="/orders/new" className="btn-primary w-full mt-4">
+            Choose Products
+          </Link>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -159,13 +240,17 @@ export default function ReviewOrderPage() {
                 Order
               </div>
               <div className="text-sm text-muted mb-4">
-                {items.length} product{items.length === 1 ? "" : "s"} · drag to
-                reorder by priority
+                {items.length} product{items.length === 1 ? "" : "s"} · drag to reorder or use Move up and Move down
               </div>
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
+                accessibility={{
+                  screenReaderInstructions: {
+                    draggable: "To reorder by keyboard, focus a reorder handle, press Space or Enter, use the arrow keys, then press Space or Enter to drop.",
+                  },
+                }}
               >
                 <SortableContext
                   items={items.map((p) => p.id)}
@@ -177,8 +262,11 @@ export default function ReviewOrderPage() {
                         key={p.id}
                         id={p.id}
                         index={idx}
+                        total={items.length}
                         name={p.name}
                         onRemove={() => removeItem(p.id)}
+                        onMoveUp={() => moveProduct(p.id, -1)}
+                        onMoveDown={() => moveProduct(p.id, 1)}
                       />
                     ))}
                   </div>
@@ -186,9 +274,9 @@ export default function ReviewOrderPage() {
               </DndContext>
             </div>
 
-            {error && <div className="text-sm text-danger mt-4">{error}</div>}
+            {error && <div role="alert" className="text-sm text-danger mt-4">{error}</div>}
 
-            <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 md:pl-56">
+            <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-30 bg-white border-t border-gray-100 md:bottom-0 md:pl-56">
               <div className="page-container px-4 py-3 flex flex-col gap-2">
                 <button
                   onClick={generateOrder}

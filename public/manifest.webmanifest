@@ -1,12 +1,15 @@
 {
-  "name": "OrderIT",
+  "id": "/",
+  "name": "OrderIT — Shop Ordering",
   "short_name": "OrderIT",
-  "description": "OrderIT — Shop order generator",
-  "start_url": "/",
+  "description": "Create and review shop orders, online or offline after the first sync.",
+  "start_url": "/offline.html",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#111827",
+  "background_color": "#0f2340",
+  "theme_color": "#0f2340",
+  "orientation": "portrait-primary",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -18,16 +21,35 @@
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/maskable-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "shortcuts": [
     {
       "name": "New Order",
-      "short_name": "New",
-      "description": "Create a new order",
-      "url": "/orders/new",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "short_name": "New Order",
+      "description": "Start a shop order",
+      "url": "/offline.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Orders",
+      "short_name": "Orders",
+      "description": "Review shop orders on this device",
+      "url": "/offline.html#orders",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

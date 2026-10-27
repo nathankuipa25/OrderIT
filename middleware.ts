@@ -5,7 +5,13 @@ const PUBLIC_PATHS = ["/login", "/register"];
 const PUBLIC_ASSET_PATHS = [
   "/manifest.webmanifest",
   "/service-worker.js",
+  "/offline.html",
+  "/offline-unavailable.html",
+  "/offline.css",
+  "/offline-app.js",
+  "/offline-store.mjs",
   "/icons/",
+  "/splash/",
   "/.well-known/",
 ];
 
@@ -19,7 +25,12 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   ) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    if (pathname.startsWith("/api/")) {
+      response.headers.set("Cache-Control", "private, no-store, max-age=0");
+      response.headers.set("Vary", "Cookie");
+    }
+    return response;
   }
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -27,7 +38,13 @@ export async function middleware(req: NextRequest) {
 
   if (!session) {
     if (pathname.startsWith("/api")) {
-      return NextResponse.json({ error: "Please log in." }, { status: 401 });
+      const response = NextResponse.json(
+        { error: "Please log in." },
+        { status: 401 }
+      );
+      response.headers.set("Cache-Control", "private, no-store, max-age=0");
+      response.headers.set("Vary", "Cookie");
+      return response;
     }
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("next", pathname);
@@ -37,22 +54,46 @@ export async function middleware(req: NextRequest) {
   // Product catalog management is admin-only. Reading the active product
   // list (GET /api/products) stays open to shops — they need it to build
   // an order — only the management page and write endpoints are gated.
+  const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
+  const isAdminApi = pathname === "/api/admin" || pathname.startsWith("/api/admin/");
+  if ((isAdminPath || isAdminApi) && session.role !== "ADMIN") {
+    if (pathname.startsWith("/api/")) {
+      const response = NextResponse.json(
+        { error: "Admins only." },
+        { status: 403 }
+      );
+      response.headers.set("Cache-Control", "private, no-store, max-age=0");
+      response.headers.set("Vary", "Cookie");
+      return response;
+    }
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
   const isProductsPage = pathname.startsWith("/products");
   const isProductsWrite =
     pathname.startsWith("/api/products") && req.method !== "GET";
 
   if ((isProductsPage || isProductsWrite) && session.role !== "ADMIN") {
     if (pathname.startsWith("/api")) {
-      return NextResponse.json({ error: "Admins only." }, { status: 403 });
+      const response = NextResponse.json(
+        { error: "Admins only." },
+        { status: 403 }
+      );
+      response.headers.set("Cache-Control", "private, no-store, max-age=0");
+      response.headers.set("Vary", "Cookie");
+      return response;
     }
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  response.headers.set("Cache-Control", "private, no-store, max-age=0");
+  response.headers.set("Vary", "Cookie");
+  return response;
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|service-worker.js|icons/|\\.well-known/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|service-worker.js|offline\\.html|offline-unavailable\\.html|offline\\.css|offline-app\\.js|offline-store\\.mjs|icons/|splash/|\\.well-known/).*)",
   ],
 };
