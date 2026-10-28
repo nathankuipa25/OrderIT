@@ -1,0 +1,5 @@
+{
+  "name": "OrderItShop",
+  "displayName": "Shop Orders",
+  "apiBaseUrl": "https://orderit-ruddy.vercel.app"
+}

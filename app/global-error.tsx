@@ -33,7 +33,7 @@ export default function GlobalError({
           Something went wrong
         </div>
         <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 20, maxWidth: 320 }}>
-          OrderIT hit an unexpected error. Try reloading the page.
+          The shop app could not load. Try reloading the page.
         </div>
         <button
           onClick={() => reset()}

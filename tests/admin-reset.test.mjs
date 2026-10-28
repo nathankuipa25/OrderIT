@@ -142,7 +142,7 @@ test("reset API is admin-gated, requires backup and confirmation, and never dele
     read("app/admin/reset/ResetConsole.tsx"),
     read("prisma/schema.prisma"),
   ]);
-  const resetHandler = route.split("export async function POST(req: NextRequest)")[1];
+  const resetHandler = route.split("async function POST(req: NextRequest)")[1];
   assert.ok(resetHandler);
   assert.ok(resetHandler.indexOf("adminError(session)") < resetHandler.indexOf("prisma.$transaction"));
   assert.match(resetHandler, /validateResetConfirmation\(body\?\.confirmation\)/);

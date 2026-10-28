@@ -6,10 +6,11 @@ import {
   parseProductCsv,
   summarizeProductRows,
 } from "@/lib/product-csv.mjs";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
 const MAX_CSV_SIZE = 5 * 1024 * 1024;
 
-export async function POST(req: NextRequest) {
+export const POST = withPrivateApiHeaders(async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "ADMIN") {
     return NextResponse.json({ error: "Admins only." }, { status: 403 });
@@ -92,4 +93,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+})

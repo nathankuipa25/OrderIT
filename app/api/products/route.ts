@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function GET(req: NextRequest) {
+export const GET = withPrivateApiHeaders(async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Please log in." }, { status: 401 });
@@ -50,9 +51,9 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withPrivateApiHeaders(async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "ADMIN") {
     return NextResponse.json({ error: "Admins only." }, { status: 403 });
@@ -86,4 +87,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+})

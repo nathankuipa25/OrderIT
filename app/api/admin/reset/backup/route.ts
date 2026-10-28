@@ -8,6 +8,7 @@ import {
 } from "@/lib/admin-reset.mjs";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ async function collectSnapshot(
   return { products, orders };
 }
 
-export async function POST() {
+export const POST = withPrivateApiHeaders(async function POST() {
   const session = await getSession();
   const access = evaluateAdminAccess(session);
   if (!access.allowed) {
@@ -74,4 +75,4 @@ export async function POST() {
       { status: 500 }
     );
   }
-}
+})

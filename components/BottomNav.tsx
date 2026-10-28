@@ -22,7 +22,13 @@ function isActive(pathname: string, href: string) {
   return pathname.startsWith(href);
 }
 
-export default function BottomNav({ role }: { role?: Role }) {
+export default function BottomNav({
+  role,
+  shopName,
+}: {
+  role?: Role;
+  shopName?: string;
+}) {
   const pathname = usePathname();
 
   // No session (login/register pages) — no nav to show.
@@ -60,7 +66,9 @@ export default function BottomNav({ role }: { role?: Role }) {
 
       {/* Desktop sidebar */}
       <nav aria-label="Main navigation" className="hidden md:flex md:flex-col md:fixed md:top-0 md:left-0 md:h-full md:w-56 md:border-r md:border-gray-100 md:bg-white md:px-4 md:py-6">
-        <div className="text-xl font-bold text-navy px-2 mb-8">OrderIT</div>
+        <div className="mb-8 truncate px-2 text-xl font-semibold text-navy">
+          {role === "SHOP" ? shopName || "Shop Orders" : "Order management"}
+        </div>
         <div className="flex flex-col gap-1">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(pathname, href);

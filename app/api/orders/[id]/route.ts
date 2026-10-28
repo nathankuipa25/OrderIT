@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function GET(
+export const GET = withPrivateApiHeaders(async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -36,4 +37,4 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+})

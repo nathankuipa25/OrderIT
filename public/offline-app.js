@@ -15,6 +15,8 @@ let selectedIds = new Set();
 let editingLocalId = null;
 let busy = false;
 let toastMessage = "";
+let toastKind = "ok";
+let toastTimer = null;
 
 function escapeHTML(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -24,26 +26,16 @@ function formatDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
-function statusNotice() {
-  if (!syncInfo.reachable) {
-    const text = navigator.onLine
-      ? "Could not reach the OrderIT service. Your saved orders remain on this device."
-      : "Offline — saved catalog and orders on this device remain available.";
-    return `<div class="status" data-kind="warn"><span class="status-dot"></span><p>${escapeHTML(text)}${accountData?.account?.lastSyncAt ? ` Last successful sync: ${escapeHTML(formatDate(accountData.account.lastSyncAt))}.` : ""}</p></div>`;
-  }
-  if (syncInfo.error) {
-    const previous = accountData?.account?.lastSyncAt
-      ? ` The workspace is showing data from the last complete sync on ${formatDate(accountData.account.lastSyncAt)}.`
-      : " This device has not completed its first sync yet.";
-    return `<div class="status" data-kind="warn"><span class="status-dot"></span><p>OrderIT was reachable, but the latest catalog/history sync did not complete: ${escapeHTML(syncInfo.error)}${escapeHTML(previous)}</p></div>`;
-  }
-  const pending = accountData?.outbox?.filter((item) => item.status === "pending").length || 0;
-  const attention = accountData?.outbox?.filter((item) => item.status === "needs_attention").length || 0;
-  const kind = attention ? "warn" : "ok";
-  let message = `Connected to OrderIT. Last successful catalog and history sync: ${formatDate(accountData?.account?.lastSyncAt)}.`;
-  if (pending) message += ` ${pending} order${pending === 1 ? " is" : "s are"} waiting to sync.`;
-  if (attention) message += ` ${attention} order${attention === 1 ? " needs" : "s need"} attention.`;
-  return `<div class="status" data-kind="${kind}"><span class="status-dot"></span><p>${escapeHTML(message)}</p></div>`;
+function flashToast(message, kind = "ok") {
+  toastMessage = message;
+  toastKind = kind;
+  if (toastTimer) clearTimeout(toastTimer);
+  render();
+  toastTimer = setTimeout(() => {
+    toastMessage = "";
+    toastTimer = null;
+    render();
+  }, 3400);
 }
 function gate(message, actionLabel, actionHref = "/login?next=%2Foffline.html", kind = "warn") {
   root.innerHTML = `<section class="card"><h1>Shop offline workspace</h1><div class="status" data-kind="${kind}"><span class="status-dot"></span><p>${escapeHTML(message)}</p></div><div class="actions"><a class="button" href="${escapeHTML(actionHref)}">${escapeHTML(actionLabel)}</a><button class="button secondary" type="button" data-action="retry">Try again</button></div><p class="subtle">First-time sign-in and initial catalog/history sync require an internet connection. Admin pages and data are not available offline.</p></section>`;
@@ -59,8 +51,8 @@ function selectedNames() {
 }
 function renderCreate() {
   const products = accountData.products.filter((product) => product.active);
-  if (!products.length) return `<section class="card"><h2>Product catalog</h2><div class="empty">No active products were included in the last successful sync. Connect to the service and retry.</div></section>`;
-  return `<section class="card"><h2>${editingLocalId ? "Review saved order" : "Create an order"}</h2><p class="subtle">Choose from the most recently synced active catalog. Your selection is saved on this device before it is sent to the service.</p><div class="product-list" style="margin-top:14px">${products.map((product) => renderProductChoice(product, selectedIds.has(product.id))).join("")}</div><div class="actions"><button class="button" data-action="review" ${selectedIds.size === 0 ? "disabled" : ""}>${editingLocalId ? "Continue review" : "Review order"}</button>${editingLocalId ? '<button class="button secondary" data-action="cancel-edit">Cancel</button>' : ""}</div></section>`;
+  if (!products.length) return `<section class="card"><h2>Product catalog</h2><div class="empty">No active products were included in the last complete sync. Connect to the internet and try again.</div></section>`;
+  return `<section class="card"><h2>${editingLocalId ? "Review saved order" : "Create an order"}</h2><p class="subtle">Choose from the most recently synced active catalog. Your selection is saved on this device before it syncs.</p><div class="product-list" style="margin-top:14px">${products.map((product) => renderProductChoice(product, selectedIds.has(product.id))).join("")}</div><div class="actions"><button class="button" data-action="review" ${selectedIds.size === 0 ? "disabled" : ""}>${editingLocalId ? "Continue review" : "Review order"}</button>${editingLocalId ? '<button class="button secondary" data-action="cancel-edit">Cancel</button>' : ""}</div></section>`;
 }
 function renderEditStale(order) {
   const oldById = new Map(order.items.map((item) => [item.productId, item]));
@@ -73,11 +65,11 @@ function renderEditStale(order) {
   for (const product of accountData.products.filter((item) => item.active && !oldById.has(item.id))) {
     rows.push(renderProductChoice(product, selectedIds.has(product.id)));
   }
-  return `<section class="card"><h2>Resolve inactive products</h2><div class="alert">The server rejected this saved order because one or more selected products are no longer active. Nothing was removed or changed. Uncheck any inactive items and, if needed, choose current products before saving the revised selection.</div><div class="product-list">${rows.join("")}</div><div class="actions"><button class="button" data-action="save-revision" ${selectedIds.size === 0 ? "disabled" : ""}>Save revised selection</button><button class="button secondary" data-action="cancel-edit">Cancel</button></div></section>`;
+  return `<section class="card"><h2>Resolve inactive products</h2><div class="alert">This order includes one or more products that are no longer active. Nothing was removed or changed. Uncheck inactive items and, if needed, choose current products before saving the revised selection.</div><div class="product-list">${rows.join("")}</div><div class="actions"><button class="button" data-action="save-revision" ${selectedIds.size === 0 ? "disabled" : ""}>Save revised selection</button><button class="button secondary" data-action="cancel-edit">Cancel</button></div></section>`;
 }
 function renderReview() {
   const names = selectedNames();
-  return `<section class="card"><h2>Review order</h2><p class="subtle">${names.length} product${names.length === 1 ? "" : "s"} · this order will be saved locally first, then sent when the service is reachable.</p><ol style="padding-left:22px;line-height:1.7">${names.map((name) => `<li>${escapeHTML(name)}</li>`).join("")}</ol><div class="actions"><button class="button" data-action="save-order" ${busy ? "disabled" : ""}>${busy ? "Saving…" : "Save order to this device"}</button><button class="button secondary" data-action="back-create">Edit products</button></div></section>`;
+  return `<section class="card"><h2>Review order</h2><p class="subtle">${names.length} product${names.length === 1 ? "" : "s"} · this order is saved on this device first and syncs when a connection is available.</p><ol style="padding-left:22px;line-height:1.7">${names.map((name) => `<li>${escapeHTML(name)}</li>`).join("")}</ol><div class="actions"><button class="button" data-action="save-order" ${busy ? "disabled" : ""}>${busy ? "Saving…" : "Save order to this device"}</button><button class="button secondary" data-action="back-create">Edit products</button></div></section>`;
 }
 function renderOrders() {
   if (!accountData.orders.length) return `<section class="card"><h2>Orders on this device</h2><div class="empty">No synced history or saved orders are stored for this shop on this device.</div></section>`;
@@ -86,16 +78,16 @@ function renderOrders() {
     const label = status === "synced" ? `Synced · Order #${escapeHTML(order.orderNumber)}` : status === "attention" ? "Needs attention" : "Pending sync";
     const items = order.items.map((item) => item.name).join(" · ");
     const canEdit = order.status === "needs_attention" && order.attentionCode === "stale_products";
-    return `<article class="order-card"><div class="order-top"><div class="order-title">${order.orderNumber ? `Order #${escapeHTML(order.orderNumber)}` : "Saved order"}</div><span class="badge ${status}">${label}</span></div><div class="order-date">${escapeHTML(formatDate(order.createdAt))}</div><p class="order-items">${escapeHTML(items)}</p>${order.attentionReason ? `<p class="order-note">${escapeHTML(order.attentionReason)}</p>` : order.status === "pending" ? '<p class="order-note">Saved on this device. The server assigns the order number after sync.</p>' : ""}${canEdit ? `<div class="actions"><button class="button secondary small" data-action="edit-stale" data-id="${escapeHTML(order.localId)}">Review product selection</button></div>` : ""}</article>`;
+    return `<article class="order-card"><div class="order-top"><div class="order-title">${order.orderNumber ? `Order #${escapeHTML(order.orderNumber)}` : "Saved order"}</div><span class="badge ${status}">${label}</span></div><div class="order-date">${escapeHTML(formatDate(order.createdAt))}</div><p class="order-items">${escapeHTML(items)}</p>${order.attentionReason ? `<p class="order-note">${escapeHTML(order.attentionReason)}</p>` : order.status === "pending" ? '<p class="order-note">Saved on this device. An order number is assigned after sync.</p>' : ""}${canEdit ? `<div class="actions"><button class="button secondary small" data-action="edit-stale" data-id="${escapeHTML(order.localId)}">Review product selection</button></div>` : ""}</article>`;
   }).join("");
   return `<section class="card"><div class="order-top"><h2 style="margin:0">Orders on this device</h2><span class="badge">${accountData.orders.length}</span></div><p class="subtle" style="margin:7px 0 14px">History is limited to records previously synced to this device, plus orders saved here.</p><div class="order-list">${cards}</div></section>`;
 }
 function render() {
   if (!shopId || !accountData?.account?.initializedAt) return;
-  const pending = accountData.outbox.filter((item) => item.status === "pending").length;
-  const attention = accountData.outbox.filter((item) => item.status === "needs_attention").length;
   const editingOrder = editingLocalId ? accountData.orders.find((order) => order.localId === editingLocalId) : null;
-  root.innerHTML = `<section class="card"><div class="order-top"><div><p class="subtle">Signed-in shop</p><h1>${escapeHTML(accountData.account.name)}</h1></div><button class="button secondary small" data-action="retry" ${busy ? "disabled" : ""}>${busy ? "Syncing…" : "Retry sync"}</button></div>${statusNotice()}<p class="subtle">${accountData.products.length} active catalog items · ${accountData.orders.length} saved or previously synced orders · ${pending} pending · ${attention} need attention</p></section><div class="tabs" role="tablist" aria-label="Shop workspace"><button class="tab" role="tab" aria-selected="${currentView !== "orders"}" data-action="tab-create">Create order</button><button class="tab" role="tab" aria-selected="${currentView === "orders"}" data-action="tab-orders">Orders</button></div>${toastMessage ? `<div class="status" data-kind="ok" role="status"><span class="status-dot"></span><p>${escapeHTML(toastMessage)}</p></div>` : ""}${currentView === "orders" ? renderOrders() : editingOrder ? renderEditStale(editingOrder) : currentView === "review" ? renderReview() : renderCreate()}<div class="actions"><a class="button secondary" href="/">Open full app</a></div>`;
+  const brand = document.querySelector(".brand span");
+  if (brand) brand.textContent = accountData.account.name || "Shop Orders";
+  root.innerHTML = `<section class="card"><div class="order-top"><div><p class="subtle">Shop workspace</p><h1>${escapeHTML(accountData.account.name)}</h1></div><button class="button secondary small" data-action="retry" ${busy ? "disabled" : ""}>${busy ? "Syncing…" : "Sync now"}</button></div><p class="subtle">${accountData.products.length} active products · ${accountData.orders.length} saved orders on this device</p></section><div class="tabs" role="tablist" aria-label="Shop workspace"><button class="tab" role="tab" aria-selected="${currentView !== "orders"}" data-action="tab-create">Create order</button><button class="tab" role="tab" aria-selected="${currentView === "orders"}" data-action="tab-orders">Orders</button></div>${toastMessage ? `<div class="status toast" data-kind="${toastKind}" role="status"><span class="status-dot"></span><p>${escapeHTML(toastMessage)}</p></div>` : ""}${currentView === "orders" ? renderOrders() : editingOrder ? renderEditStale(editingOrder) : currentView === "review" ? renderReview() : renderCreate()}`;
 }
 async function loadCurrentShop() {
   if (!shopId) return;
@@ -106,12 +98,24 @@ async function startSync() {
   if (busy) return;
   busy = true;
   render();
+  let completionMessage = "";
+  let completionKind = "ok";
   try {
     syncInfo = await syncShop();
     if (syncInfo.role === "SHOP" && syncInfo.shopId) {
       shopId = syncInfo.shopId;
-      if (syncInfo.queue?.attention) toastMessage = `${syncInfo.queue.attention} order${syncInfo.queue.attention === 1 ? " needs" : "s need"} attention; saved drafts were kept.`;
-      else toastMessage = "Sync check complete.";
+      if (syncInfo.reachable === false) {
+        completionMessage = "You’re offline. Saved orders remain on this device.";
+        completionKind = "warn";
+      } else if (syncInfo.error) {
+        completionMessage = "Some shop data couldn’t sync. Saved orders remain on this device.";
+        completionKind = "warn";
+      } else if (syncInfo.queue?.attention) {
+        completionMessage = `${syncInfo.queue.attention} order${syncInfo.queue.attention === 1 ? " needs" : "s need"} attention; saved drafts were kept.`;
+        completionKind = "warn";
+      } else if (syncInfo.queue?.pending) {
+        completionMessage = `${syncInfo.queue.pending} order${syncInfo.queue.pending === 1 ? " is" : "s are"} still queued.`;
+      } else completionMessage = "Shop data is up to date.";
       accountData = await getShopData(shopId);
     } else {
       shopId = null;
@@ -119,6 +123,8 @@ async function startSync() {
     }
   } catch (error) {
     syncInfo = { reachable: false, error: error instanceof Error ? error.message : "Sync check failed." };
+    completionMessage = "Sync couldn’t finish. Saved orders remain on this device.";
+    completionKind = "warn";
     const context = await getDeviceContext().catch(() => ({ role: "SIGNED_OUT", userId: null }));
     if (context.role === "SHOP" && context.userId) {
       shopId = context.userId;
@@ -130,21 +136,24 @@ async function startSync() {
   if (!shopId) {
     const context = await getDeviceContext().catch(() => ({ role: "SIGNED_OUT", userId: null }));
     if (syncInfo.role === "ADMIN" || context.role === "ADMIN") {
-      gate("Admin pages and admin data are online-only. This workspace does not expose shop data while an administrator is the active account on this device.", "Open full app", "/", "error");
+      gate("This workspace is for shop accounts. Sign in with a shop account to continue.", "Sign in online");
     } else if (syncInfo.reachable && syncInfo.role === null) {
-      gate("Sign in online with a shop account to initialize offline use. Passwords and session credentials are never stored in this device database.", "Sign in online");
+      gate("Sign in with a shop account and complete the first sync while connected to the internet to start using this workspace offline.", "Sign in online");
     } else {
       gate("No initialized shop workspace is available for the current device account. Previously saved orders remain partitioned on this device and are not deleted.", "Sign in online");
     }
     return;
   }
   if (!accountData?.account?.initializedAt) {
-    gate("This shop has not completed its first online catalog and order-history sync on this device. Connect to the service and retry before using offline orders.", "Open full app", "/", "warn");
+    gate("Complete the first shop sync while connected to the internet before using this workspace offline.", "Sign in online", "/login?next=%2Foffline.html", "warn");
     return;
   }
   render();
+  if (completionMessage) flashToast(completionMessage, completionKind);
 }
 async function retrySync() {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = null;
   toastMessage = "";
   await startSync();
 }
@@ -164,7 +173,7 @@ root.addEventListener("click", async (event) => {
       let shouldSync = false;
       try {
         await enqueueOrder(shopId, [...selectedIds]);
-        selectedIds = new Set(); currentView = "orders"; toastMessage = "Order saved on this device. Sync will retry automatically when OrderIT is reachable.";
+        selectedIds = new Set(); currentView = "orders"; flashToast("Order saved on this device. Sync will retry when a connection is available.");
         await loadCurrentShop();
         shouldSync = navigator.onLine;
       } finally { busy = false; render(); }
@@ -174,15 +183,14 @@ root.addEventListener("click", async (event) => {
       if (order) { editingLocalId = order.localId; selectedIds = new Set(order.items.map((item) => item.productId)); currentView = "create"; render(); }
     } else if (action === "save-revision") {
       await reviseQueuedOrder(shopId, editingLocalId, [...selectedIds]);
-      editingLocalId = null; currentView = "orders"; toastMessage = "Revised selection saved. The original draft remains under the same retry key.";
+      editingLocalId = null; currentView = "orders"; flashToast("Revised selection saved. The original draft is preserved.");
       await loadCurrentShop();
       if (navigator.onLine) void startSync();
     } else if (action === "cancel-edit") {
       editingLocalId = null; selectedIds = new Set(); currentView = "orders"; await loadCurrentShop();
     }
   } catch (error) {
-    toastMessage = error instanceof Error ? error.message : "The action could not be completed.";
-    render();
+    flashToast(error instanceof Error ? error.message : "The action could not be completed.", "warn");
   }
 });
 root.addEventListener("change", (event) => {
@@ -194,7 +202,7 @@ root.addEventListener("change", (event) => {
 });
 
 window.addEventListener("online", () => { void startSync(); });
-window.addEventListener("offline", () => { syncInfo = { reachable: false, error: null }; if (shopId) void loadCurrentShop(); });
+window.addEventListener("offline", () => { syncInfo = { reachable: false, error: null }; if (shopId) { void loadCurrentShop(); flashToast("You’re offline. Saved orders remain on this device.", "warn"); } });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") void startSync(); });
 
 async function registerWorker() {

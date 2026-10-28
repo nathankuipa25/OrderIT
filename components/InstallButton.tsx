@@ -50,7 +50,7 @@ export default function InstallButton() {
       className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-6 right-6 z-50 rounded-lg bg-indigo-600 text-white px-4 py-2 shadow-lg"
       aria-label="Install app"
     >
-      Install OrderIT
+      Install shop app
     </button>
   );
 }

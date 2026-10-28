@@ -191,7 +191,7 @@ const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
                 marginTop: 18,
               }}
             >
-              ORDERIT
+              SHOP ORDER
             </div>
           </div>
         ) : (

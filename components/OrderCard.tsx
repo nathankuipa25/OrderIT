@@ -2,15 +2,14 @@ import Link from "next/link";
 
 function formatDateTime(iso: string) {
   const d = new Date(iso);
-  const date = d.toLocaleDateString(undefined, {
-    day: "2-digit",
+  return d.toLocaleDateString(undefined, {
+    day: "numeric",
     month: "short",
-  });
-  const time = d.toLocaleTimeString(undefined, {
+    year: "numeric",
+  }) + " · " + d.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
-  return `${date} · ${time}`;
 }
 
 export default function OrderCard({
@@ -29,33 +28,37 @@ export default function OrderCard({
   return (
     <Link
       href={`/orders/${id}`}
-      className="card flex items-center justify-between px-4 py-3.5 min-h-[44px]"
+      className="card group flex min-h-[76px] items-center justify-between gap-3 px-4 py-3.5 transition active:scale-[0.99]"
     >
-      <div>
-        <div className="font-semibold text-ink">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <div className="truncate font-semibold text-ink">
           Order #{String(orderNumber).padStart(3, "0")}
+          </div>
+          <span className="shrink-0 rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
+            {itemCount} product{itemCount === 1 ? "" : "s"}
+          </span>
         </div>
         {shopName && (
-          <div className="text-xs font-medium text-accent mt-0.5">
+          <div className="mt-1 truncate text-xs font-medium text-accent">
             {shopName}
           </div>
         )}
-        <div className="text-sm text-muted mt-0.5">
-          {itemCount} product{itemCount === 1 ? "" : "s"}
-        </div>
-        <div className="text-xs text-muted mt-0.5">
+        <div className="mt-1 text-xs text-muted">
           {formatDateTime(createdAt)}
         </div>
       </div>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-muted transition group-hover:bg-accent-light group-hover:text-navy">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
-          d="M9 6l6 6-6 6"
-          stroke="#9ca3af"
+          d="m9 5 7 7-7 7"
+          stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       </svg>
+      </div>
     </Link>
   );
 }

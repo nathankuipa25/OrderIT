@@ -54,6 +54,11 @@ export default function AccountMenu({
     }
   }
 
+  function syncShopNow() {
+    window.dispatchEvent(new Event("shop:sync-now"));
+    setOpen(false);
+  }
+
   return (
     <div className="relative" ref={menuRef}>
       <button
@@ -78,19 +83,36 @@ export default function AccountMenu({
               {role === "ADMIN" ? "Admin" : "Shop account"}
             </div>
           </div>
+          {role === "SHOP" && (
+            <>
+              <button
+                onClick={syncShopNow}
+                className="block w-full rounded-lg px-1 py-2 text-left text-sm font-medium text-ink hover:bg-surface"
+              >
+                Sync shop now
+              </button>
+              <Link
+                href="/offline.html"
+                onClick={() => setOpen(false)}
+                className="block w-full rounded-lg px-1 py-2 text-sm font-medium text-ink hover:bg-surface"
+              >
+                Offline workspace
+              </Link>
+            </>
+          )}
           <Link
             href="/account"
             onClick={() => setOpen(false)}
-            className="block w-full text-left px-1 py-1.5 text-sm font-medium text-ink"
+            className="block w-full rounded-lg px-1 py-2 text-sm font-medium text-ink hover:bg-surface"
           >
             Account settings
           </Link>
           <button
             onClick={handleLogout}
             disabled={loggingOut}
-            className="w-full text-left px-1 py-1.5 text-sm font-medium text-danger disabled:opacity-50"
+            className="w-full rounded-lg px-1 py-2 text-left text-sm font-medium text-danger hover:bg-red-50 disabled:opacity-50"
           >
-            {loggingOut ? "Logging out..." : "Log out"}
+            {loggingOut ? "Logging out…" : "Log out"}
           </button>
         </div>
       )}

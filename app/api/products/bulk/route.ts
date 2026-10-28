@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withPrivateApiHeaders(async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session || session.role !== "ADMIN") {
     return NextResponse.json({ error: "Admins only." }, { status: 403 });
@@ -33,4 +34,4 @@ export async function PATCH(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+})

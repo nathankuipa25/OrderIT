@@ -31,7 +31,7 @@ const config: Config = {
         subtle: "0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06)",
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        sans: ["Roboto", "system-ui", "-apple-system", "Arial", "sans-serif"],
       },
     },
   },

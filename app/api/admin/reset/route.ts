@@ -12,6 +12,7 @@ import {
 } from "@/lib/admin-reset.mjs";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
 export const runtime = "nodejs";
 
@@ -42,7 +43,7 @@ function adminError(session: Awaited<ReturnType<typeof getSession>>) {
   return NextResponse.json({ error: access.error }, { status: access.status });
 }
 
-export async function GET() {
+export const GET = withPrivateApiHeaders(async function GET() {
   const session = await getSession();
   const denied = adminError(session);
   if (denied) return denied;
@@ -51,9 +52,9 @@ export async function GET() {
   return NextResponse.json(availability, {
     headers: { "Cache-Control": "private, no-store, max-age=0" },
   });
-}
+})
 
-export async function POST(req: NextRequest) {
+export const POST = withPrivateApiHeaders(async function POST(req: NextRequest) {
   const session = await getSession();
   const denied = adminError(session);
   if (denied) return denied;
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+})
 
 class ResetRequestError extends Error {
   constructor(message: string, readonly status: 400 | 409) {

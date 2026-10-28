@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { createSessionCookie } from "@/lib/session";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function POST(req: NextRequest) {
+export const POST = withPrivateApiHeaders(async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const name = String(body?.name || "").trim();
@@ -55,4 +56,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+})
