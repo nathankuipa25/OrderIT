@@ -33,6 +33,7 @@ jobs:
 
       - name: Run Lighthouse
         run: |
+          mkdir -p ./lighthouse
           npx lighthouse http://localhost:3000 --output html --output-path ./lighthouse/report.html --chrome-flags="--no-sandbox"
 
       - name: Upload Lighthouse report
