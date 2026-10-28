@@ -1,0 +1,40 @@
+export type ProductRecord = { id: string; name: string; active: boolean };
+export type OrderItem = { productId: string; name: string; position: number };
+export type OrderStatus = "pending" | "synced" | "needs_attention";
+export type OrderRecord = {
+  key: string;
+  shopId: string;
+  localId: string;
+  serverId: string | null;
+  idempotencyKey: string | null;
+  orderNumber: number | null;
+  createdAt: string;
+  items: OrderItem[];
+  status: OrderStatus;
+  attentionCode: string | null;
+  attentionReason: string | null;
+};
+export type OutboxRecord = {
+  key: string;
+  shopId: string;
+  localId: string;
+  idempotencyKey: string;
+  productIds: string[];
+  createdAt: string;
+  status: OrderStatus;
+  attentionCode: string | null;
+  attentionReason: string | null;
+};
+export type ServerOrder = {
+  id: string;
+  orderNumber: number;
+  createdAt: string;
+  idempotencyKey?: string | null;
+  items: Array<{ productId: string; position?: number; product?: { name: string }; name?: string }>;
+};
+export function recordKey(shopId: string, recordId: string): string;
+export function createPendingOrderRecord(args: { shopId: string; productIds: string[]; products: ProductRecord[]; localId?: string; idempotencyKey?: string; createdAt?: string }): OrderRecord;
+export function createOutboxRecord(order: OrderRecord): OutboxRecord;
+export function classifySyncFailure(status: number, message?: string): { status: OrderStatus; code: string | null; message: string };
+export function reviseAttentionOrder(order: OrderRecord, productIds: string[], activeProducts: ProductRecord[]): OrderRecord;
+export function mergeServerOrders(shopId: string, existingOrders: OrderRecord[], serverOrders: ServerOrder[]): { orders: OrderRecord[]; acknowledgedLocalIds: string[] };

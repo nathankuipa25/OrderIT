@@ -1,42 +1,49 @@
-# Shop Orders Android app
+# Shop Orders for Android
 
-This is a small native Android shell for the existing OrderIT shop experience. It opens the production HTTPS service in a full-screen WebView, with no browser address bar. It keeps navigation on the configured service host, rejects cleartext traffic, suppresses registration/admin-facing entry points in the app UI, and only accepts PNG files from the trusted app page for saving into the phone's `Pictures/Shop Orders` folder.
-
-The Android app does not contain the Next.js server, database credentials, passwords, or session tokens. The live order service remains hosted at `https://orderit-ruddy.vercel.app/` by default. Initial login and the first catalog/history sync require internet. The existing service worker and shop-local offline workspace can support previously synced shop data and queued orders, subject to the app's normal offline limitations.
+The Android app is a React Native client with native screens, Android system typography, a secure credential store, and native gallery image saving. The hosted Next.js service remains the backend. The app does not include database credentials or the web platform's registration/admin screens.
 
 ## Build a test APK
 
-From the repository root, run:
+Install the repository's Node dependencies and configure Android Studio's SDK plus JDK 17 or newer. Then run from the repository root:
+
+```sh
+npm install
+npm run android:apk
+```
+
+The self-contained `standalone` test APK is written to:
+
+```text
+android/app/build/outputs/apk/standalone/app-standalone.apk
+```
+
+This variant embeds the JavaScript bundle and disables Metro-dependent developer support, so it can run without a computer or Metro server. It uses the `.debug` application ID suffix and local debug signing for sideload testing only; it is not a Play Store release. A separately controlled release signing key is required before publishing and for signed updates. The normal development APK is `npm run android:apk:dev` and requires `npm run mobile:start` while the app is running.
+
+The production service URL defaults to `https://orderit-ruddy.vercel.app/`. Override it without editing source:
 
 ```sh
 cd android
-./gradlew assembleDebug
+./gradlew assembleStandalone -PshopAppUrl=https://your-production-host/
 ```
 
-The installable debug APK is created at:
+Or set `ORDERIT_SHOP_APP_URL` in the build environment. The app accepts HTTPS service addresses only.
 
-```text
-android/app/build/outputs/apk/debug/app-debug.apk
-```
+## Shop login and backend
 
-It is signed with the local Android debug key for sideload testing. It is not a Play Store release. A separately controlled release signing key is required for public distribution and for maintaining the same app-signature identity across updates.
+Native sign-in uses `POST /api/auth/mobile/login`, which accepts shop accounts only and returns an audience-scoped bearer session. The token is saved with Android's secure credential store; ordinary local product/order data is stored separately on the device. The mobile API route and bearer-session support must be deployed on the hosted service before this app version can sign in.
 
-The service URL can be overridden at build time without editing source:
+## Offline orders and upgrade import
 
-```sh
-./gradlew assembleDebug -PshopAppUrl=https://your-production-host/
-```
+A shop signs in and completes its first catalog and order-history sync while online. After that, the native app keeps the active catalog, synced history, and locally saved orders on the phone. Queued orders retain stable idempotency keys; the app reconciles a lost server acknowledgement from order history and does not silently remove products that later become inactive. Such drafts stay available for explicit review. Reconnect, app foreground, and the Sync button trigger a sync attempt.
 
-Or set `ORDERIT_SHOP_APP_URL` in the build environment. Only HTTPS URLs are accepted at runtime.
+On first launch after upgrading from the former WebView app, a temporary hidden WebView reads that app's same-origin IndexedDB once and imports the saved shop data to native storage. The visible app screens are React Native. Keep the old app data intact until the first import completes; do not clear app storage during that transition.
 
-## Shop privacy and platform boundary
+Local shop data is stored on the phone and is not encrypted by the app. Use a device lock and avoid shared/untrusted devices. Signing out clears the native session from the secure store but preserves locally queued orders; the same shop must sign in online again to access/sync its records.
 
-The app hides the address bar, registration link, desktop/web navigation hints, share/PDF controls, and admin-account content during normal use. The service origin still has to be embedded as the app's backend destination. A technically curious person can discover it by inspecting the APK or device network traffic; this wrapper does not make the hosted service technically unidentifiable.
+## Native order images
 
-The app is portrait-oriented, supports Android 6.0/API 23 and newer, and uses the system media library to save order images. Android 9 and older may request storage permission on the first image save.
+Order cards can be rendered as PNG and saved into `Pictures/Shop Orders`. Android 10 and newer use MediaStore; older supported versions request storage permission when needed.
 
-## Validation
+## Validation and release readiness
 
-Builds can verify compilation, APK packaging, manifest metadata, and debug signing. There is no Android emulator or physical device attached to this build environment, so install, login, live ordering, offline launch, and gallery behavior still need a real-device acceptance pass before shop rollout.
-
-In the Android offline workspace, shops can also save a PNG preview of a reviewed draft or saved order. A preview created before synchronization is labelled as not yet submitted/pending sync; it is not an official order confirmation or server-assigned order number.
+Run the automated suite with `npm test` and the TypeScript check with `npx tsc --noEmit`. `npm run android:apk` verifies native compilation, standalone bundle packaging, and debug signing. A real Android acceptance pass is still required for install/upgrade import, login against the deployed mobile API, first sync, airplane-mode order creation, reconnect/idempotency, account switching, keyboard/back behavior, and gallery saving. The standalone APK is not a public release artifact.

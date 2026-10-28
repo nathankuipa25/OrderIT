@@ -1,23 +1,36 @@
 plugins {
-    id 'com.android.application'
+    id "com.android.application"
+    id "com.facebook.react"
+}
+
+react {
+    root = file("../..")
+    reactNativeDir = file("../../node_modules/react-native")
+    codegenDir = file("../../node_modules/@react-native/codegen")
+    cliFile = file("../../node_modules/react-native/cli.js")
+    entryFile = file("../../mobile/index.js")
+    bundleConfig = file("../../mobile/metro.config.js")
+    debuggableVariants = ["debug"]
+    autolinkLibrariesWithApp()
 }
 
 android {
-    namespace 'com.orderit.shop'
-    compileSdk 35
+    namespace "com.orderit.shop"
+    compileSdk rootProject.ext.compileSdkVersion
 
     defaultConfig {
-        applicationId 'com.orderit.shop'
-        minSdk 23
-        targetSdk 34
-        versionCode 1
-        versionName '1.0.0'
+        applicationId "com.orderit.shop"
+        minSdk rootProject.ext.minSdkVersion
+        targetSdk rootProject.ext.targetSdkVersion
+        versionCode 2
+        versionName "2.0.0"
 
-        def shopAppUrl = providers.gradleProperty('shopAppUrl')
-            .orElse(providers.environmentVariable('ORDERIT_SHOP_APP_URL'))
-            .orElse('https://orderit-ruddy.vercel.app/')
+        def shopAppUrl = providers.gradleProperty("shopAppUrl")
+            .orElse(providers.environmentVariable("ORDERIT_SHOP_APP_URL"))
+            .orElse("https://orderit-ruddy.vercel.app/")
             .get()
-        buildConfigField 'String', 'SHOP_APP_URL', '"' + shopAppUrl.replace('"', '\\"') + '"'
+        def escapedShopAppUrl = shopAppUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+        buildConfigField "String", "SHOP_APP_URL", "\"${escapedShopAppUrl}\""
     }
 
     buildFeatures {
@@ -31,12 +44,30 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix '.debug'
-            versionNameSuffix '-debug'
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
         }
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
+        standalone {
+            initWith release
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-standalone"
+            debuggable false
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            matchingFallbacks = ["release"]
+        }
+    }
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation("org.webkit:android-jsc:+")
     }
 }

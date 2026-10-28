@@ -22,6 +22,7 @@ export default function ShopSyncToast({
   const [notice, setNotice] = useState<Notice | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncing = useRef(false);
+  const shouldNotify = useRef(false);
 
   const showNotice = useCallback((message: string, kind: Notice["kind"] = "success") => {
     setNotice({ message, kind });
@@ -29,24 +30,31 @@ export default function ShopSyncToast({
     noticeTimer.current = setTimeout(() => setNotice(null), 3400);
   }, []);
 
-  const requestSync = useCallback(async () => {
-    if (role !== "SHOP" || !userId || !("serviceWorker" in navigator) || syncing.current) return;
+  const requestSync = useCallback(async (notify = false) => {
+    if (role !== "SHOP" || !userId || !("serviceWorker" in navigator)) return;
+    if (syncing.current) {
+      if (notify) shouldNotify.current = true;
+      return;
+    }
     if (!navigator.onLine) {
-      showNotice("You’re offline. Saved orders remain on this device.", "neutral");
+      if (notify) showNotice("You’re offline. Saved orders remain on this device.", "neutral");
       return;
     }
 
     syncing.current = true;
+    shouldNotify.current = notify;
     let posted = false;
     try {
       const response = await fetch("/api/auth/me", { cache: "no-store" });
       if (!response.ok) {
-        showNotice("Sign in online to sync this shop.", "warning");
+        if (shouldNotify.current) showNotice("Sign in online to sync this shop.", "warning");
+        shouldNotify.current = false;
         return;
       }
       const payload = await response.json();
       if (payload?.user?.role !== "SHOP" || payload?.user?.id !== userId) {
-        showNotice("The active shop account changed. Sign in again to sync.", "warning");
+        if (shouldNotify.current) showNotice("The active shop account changed. Sign in again to sync.", "warning");
+        shouldNotify.current = false;
         return;
       }
       const registration = await navigator.serviceWorker.ready;
@@ -56,14 +64,20 @@ export default function ShopSyncToast({
       worker.postMessage({ type: "ENABLE_BACKGROUND_SYNC" });
       posted = true;
     } catch {
-      showNotice(
-        navigator.onLine
-          ? "Sync couldn’t start. Saved orders remain on this device."
-          : "You’re offline. Saved orders remain on this device.",
-        "warning"
-      );
+      if (shouldNotify.current) {
+        showNotice(
+          navigator.onLine
+            ? "Sync couldn’t start. Saved orders remain on this device."
+            : "You’re offline. Saved orders remain on this device.",
+          "warning"
+        );
+      }
+      shouldNotify.current = false;
     } finally {
-      if (!posted) syncing.current = false;
+      if (!posted) {
+        syncing.current = false;
+        shouldNotify.current = false;
+      }
     }
   }, [role, userId, showNotice]);
 
@@ -80,6 +94,8 @@ export default function ShopSyncToast({
       if (typeof result?.pendingCount === "number" || typeof result?.attentionCount === "number") return;
       if (!result || (result.role !== "SHOP" && typeof result.reachable !== "boolean" && !result.error)) return;
 
+      const notify = shouldNotify.current;
+      shouldNotify.current = false;
       syncing.current = false;
       let message = "Shop data is up to date.";
       let kind: Notice["kind"] = "success";
@@ -101,26 +117,26 @@ export default function ShopSyncToast({
         message = `${count} order${count === 1 ? " is" : "s are"} still queued.`;
         kind = "neutral";
       }
-      showNotice(message, kind);
+      if (notify) showNotice(message, kind);
 
       void navigator.serviceWorker.ready.then((registration) => {
         registration.active?.postMessage({ type: "GET_SHOP_STATUS", shopId: userId });
       }).catch(() => {});
     };
 
-    const onOnline = () => void requestSync();
+    const onOnline = () => void requestSync(false);
     const onOffline = () => showNotice("You’re offline. Saved orders remain on this device.", "neutral");
     const onVisible = () => {
-      if (document.visibilityState === "visible") void requestSync();
+      if (document.visibilityState === "visible") void requestSync(false);
     };
-    const onManualSync = () => void requestSync();
+    const onManualSync = () => void requestSync(true);
 
     navigator.serviceWorker.addEventListener("message", onMessage);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     window.addEventListener("shop:sync-now", onManualSync);
     document.addEventListener("visibilitychange", onVisible);
-    void requestSync();
+    void requestSync(false);
 
     return () => {
       alive = false;

@@ -1,7 +1,12 @@
-import { cookies } from "next/headers";
-import { SESSION_COOKIE, SessionPayload, signSession, verifySession } from "./auth";
+import { cookies, headers } from "next/headers";
+import { SESSION_COOKIE, SessionPayload, signSession, verifyMobileSession, verifySession } from "./auth";
 
 export async function getSession(): Promise<SessionPayload | null> {
+  const authorization = headers().get("authorization");
+  if (authorization) {
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    return match ? verifyMobileSession(match[1]) : null;
+  }
   const token = cookies().get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return verifySession(token);

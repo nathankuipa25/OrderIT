@@ -28,11 +28,38 @@ export async function signSession(payload: SessionPayload): Promise<string> {
     .sign(getSecretKey());
 }
 
+export async function signMobileSession(payload: SessionPayload): Promise<string> {
+  return new SignJWT({ ...payload, client: "native" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setAudience("orderit-native")
+    .setExpirationTime("30d")
+    .sign(getSecretKey());
+}
+
+export async function verifyMobileSession(token: string): Promise<SessionPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecretKey(), { audience: "orderit-native" });
+    if (
+      payload.client === "native" &&
+      typeof payload.sub === "string" &&
+      (payload.role === "ADMIN" || payload.role === "SHOP") &&
+      typeof payload.name === "string"
+    ) {
+      return { sub: payload.sub, role: payload.role, name: payload.name };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function verifySession(
   token: string
 ): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
+    if (payload.client === "native" || payload.aud !== undefined) return null;
     if (
       typeof payload.sub === "string" &&
       (payload.role === "ADMIN" || payload.role === "SHOP") &&
