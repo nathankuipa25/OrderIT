@@ -1,6 +1,6 @@
 import { getDeviceContext, getShopStatus, setDeviceContext, syncShop } from "/offline-store.mjs";
 
-const CACHE_NAME = "orderit-app-shell-v4";
+const CACHE_NAME = "orderit-app-shell-v5";
 const PRECACHE_URLS = [
   "/offline.html",
   "/offline-unavailable.html",
@@ -57,7 +57,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request).catch(async () => {
         const fallbackPath = isShopNavigation(url.pathname) ? "/offline.html" : "/offline-unavailable.html";
-        return (await caches.match(fallbackPath)) || new Response("OrderIT is unavailable offline.", {
+        return (await caches.match(fallbackPath)) || new Response("The shop app is unavailable offline.", {
           status: 503,
           headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
         });

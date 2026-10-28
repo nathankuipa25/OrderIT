@@ -3,7 +3,7 @@
   window.__orderItShopBridgeInstalled = true;
 
   var nativeApp = window.OrderItNative;
-  var offlineShell = !!document.getElementById("app") && /Shop Workspace/i.test(document.title);
+  var offlineShell = !!document.getElementById("app") && /Workspace/i.test(document.title);
   var objectUrls = new Map();
   var originalCreateObjectURL = URL.createObjectURL.bind(URL);
   var originalRevokeObjectURL = URL.revokeObjectURL.bind(URL);
@@ -82,30 +82,37 @@
 
       context.font = "700 26px Arial, sans-serif";
       var titleLines = wrapText(context, title || "Order preview", width - padding * 2);
+      var shopName = (document.querySelector("#app h1") || document.querySelector(".brand span"));
+      shopName = shopName ? shopName.textContent.trim() : "Shop Orders";
+      context.font = "700 30px Arial, sans-serif";
+      var shopLines = wrapText(context, shopName, width - padding * 2).slice(0, 2);
+      var headerExtra = Math.max(0, shopLines.length - 1) * 36;
       context.font = "18px Arial, sans-serif";
       var itemLines = page.items.map(function (item) {
         return wrapText(context, item, width - padding * 2 - 54);
       });
       var contentHeight = itemLines.reduce(function (sum, lines) { return sum + lines.length * 34 + 18; }, 0);
-      canvas.height = 340 + titleLines.length * 38 + contentHeight;
+      canvas.height = 340 + headerExtra + titleLines.length * 38 + contentHeight;
 
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, canvas.width, canvas.height);
       context.textBaseline = "top";
       context.fillStyle = "#0f2340";
       context.font = "700 30px Arial, sans-serif";
-      context.fillText("OrderIT", padding, 40);
+      shopLines.forEach(function (line, lineIndex) {
+        context.fillText(line, padding, 40 + lineIndex * 36);
+      });
       context.fillStyle = "#687386";
       context.font = "16px Arial, sans-serif";
-      context.fillText("SHOP ORDER", padding, 82);
+      context.fillText("SHOP ORDER", padding, 82 + headerExtra);
       context.strokeStyle = "#e4e8ee";
       context.lineWidth = 2;
       context.beginPath();
-      context.moveTo(padding, 116);
-      context.lineTo(width - padding, 116);
+      context.moveTo(padding, 116 + headerExtra);
+      context.lineTo(width - padding, 116 + headerExtra);
       context.stroke();
 
-      var y = 144;
+      var y = 144 + headerExtra;
       context.fillStyle = "#1c1f26";
       context.font = "700 26px Arial, sans-serif";
       titleLines.forEach(function (line) {

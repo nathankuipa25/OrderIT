@@ -6,18 +6,36 @@ html,
 body {
   background-color: #f6f7f9;
   color: #1c1f26;
+  font-family: Roboto, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #8ab4ff;
+  outline-offset: 2px;
+}
+
 .btn-primary {
-  @apply bg-navy text-white font-semibold rounded-xl h-12 flex items-center justify-center active:opacity-80 transition disabled:opacity-40 disabled:pointer-events-none;
+  @apply bg-navy text-white font-semibold rounded-2xl min-h-[52px] px-4 flex items-center justify-center active:scale-[0.99] active:opacity-90 transition disabled:opacity-40 disabled:pointer-events-none;
 }
 
 .btn-secondary {
-  @apply bg-white text-navy font-semibold rounded-xl h-12 flex items-center justify-center border border-gray-200 active:opacity-70 transition;
+  @apply bg-white text-navy font-semibold rounded-2xl min-h-[48px] px-4 flex items-center justify-center border border-gray-200 active:opacity-70 transition;
 }
 
 .card {

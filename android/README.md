@@ -1,6 +1,6 @@
-# OrderIT Shop Android app
+# Shop Orders Android app
 
-This is a small native Android shell for the existing OrderIT shop experience. It opens the production HTTPS service in a full-screen WebView, with no browser address bar. It keeps navigation on the configured service host, rejects cleartext traffic, suppresses registration/admin-facing entry points in the app UI, and only accepts PNG files from the trusted app page for saving into the phone's `Pictures/OrderIT Orders` folder.
+This is a small native Android shell for the existing OrderIT shop experience. It opens the production HTTPS service in a full-screen WebView, with no browser address bar. It keeps navigation on the configured service host, rejects cleartext traffic, suppresses registration/admin-facing entry points in the app UI, and only accepts PNG files from the trusted app page for saving into the phone's `Pictures/Shop Orders` folder.
 
 The Android app does not contain the Next.js server, database credentials, passwords, or session tokens. The live order service remains hosted at `https://orderit-ruddy.vercel.app/` by default. Initial login and the first catalog/history sync require internet. The existing service worker and shop-local offline workspace can support previously synced shop data and queued orders, subject to the app's normal offline limitations.
 

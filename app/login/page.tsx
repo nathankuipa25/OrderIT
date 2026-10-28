@@ -61,8 +61,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-[80vh] flex flex-col justify-center max-w-sm mx-auto w-full">
       <div className="text-center mb-8">
-        <div className="text-2xl font-bold text-navy">OrderIT</div>
-        <div className="text-sm text-muted mt-1">Sign in to your account</div>
+        <div className="text-2xl font-semibold text-navy">Shop Orders</div>
+        <div className="text-sm text-muted mt-1">Sign in to your shop account</div>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">

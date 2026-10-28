@@ -1,14 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
-import OfflineShopStatus from "@/components/OfflineShopStatus";
+import ShopSyncToast from "@/components/ShopSyncToast";
 import SWRProvider from "@/components/SWRProvider";
 import { getSession } from "@/lib/session";
 import SWRegister from "./sw-register";
 import InstallButton from "@/components/InstallButton";
-
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -18,9 +15,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "OrderIT",
-  applicationName: "OrderIT",
-  description: "Shop order generator with an offline-ready shop workspace.",
+  title: "Shop Orders",
+  applicationName: "Shop Orders",
+  description: "Create and review shop orders, online or offline after the first sync.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -32,7 +29,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "OrderIT",
+    title: "Shop Orders",
     statusBarStyle: "black-translucent",
   },
 };
@@ -49,20 +46,20 @@ export default async function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="OrderIT" />
+        <meta name="apple-mobile-web-app-title" content="Shop Orders" />
         <link rel="apple-touch-startup-image" href="/splash/iphone-6-7.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" />
         <link rel="apple-touch-startup-image" href="/splash/iphone-6-1.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)" />
         <link rel="apple-touch-startup-image" href="/splash/ipad-12-9.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)" />
       </head>
-      <body className={`${inter.variable} font-sans bg-surface min-h-screen`}>
+      <body className="font-sans min-h-screen bg-surface">
         <SWRProvider>
-          <div className="pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-6 md:pl-56">
-            <div className="page-container px-4 pt-4">
-              <OfflineShopStatus role={session?.role} userId={session?.sub} />
+          <div className="pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-6 md:pl-56">
+            <div className="page-container px-4 pt-3">
+              <ShopSyncToast role={session?.role} userId={session?.sub} />
               {children}
             </div>
           </div>
-          <BottomNav role={session?.role} />
+          <BottomNav role={session?.role} shopName={session?.role === "SHOP" ? session.name : undefined} />
         </SWRProvider>
         <SWRegister role={session?.role} userId={session?.sub} />
         <InstallButton />

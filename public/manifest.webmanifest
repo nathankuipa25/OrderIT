@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "OrderIT — Shop Ordering",
-  "short_name": "OrderIT",
+  "name": "Shop Orders",
+  "short_name": "Shop Orders",
   "description": "Create and review shop orders, online or offline after the first sync.",
   "start_url": "/offline.html",
   "scope": "/",

@@ -196,7 +196,7 @@ public final class MainActivity extends Activity {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
         TextView title = new TextView(this);
-        title.setText("OrderIT Shop");
+        title.setText("Shop Orders");
         title.setTextColor(Color.rgb(15, 35, 64));
         title.setTextSize(20f);
         title.setGravity(Gravity.CENTER);
@@ -213,7 +213,7 @@ public final class MainActivity extends Activity {
         panel.setBackgroundColor(Color.WHITE);
 
         TextView title = new TextView(this);
-        title.setText("OrderIT Shop is offline");
+        title.setText("Shop Orders is offline");
         title.setTextColor(Color.rgb(15, 35, 64));
         title.setTextSize(22f);
         title.setGravity(Gravity.CENTER);
@@ -238,7 +238,7 @@ public final class MainActivity extends Activity {
 
     private void showFatalConfigurationError() {
         TextView message = new TextView(this);
-        message.setText("OrderIT Shop could not start because its secure service address is not configured.");
+        message.setText("Shop Orders could not start because its secure service address is not configured.");
         message.setTextColor(Color.rgb(15, 35, 64));
         message.setGravity(Gravity.CENTER);
         message.setPadding(32, 32, 32, 32);
@@ -361,7 +361,7 @@ public final class MainActivity extends Activity {
             } else {
                 writeToPicturesDirectory(image);
             }
-            showToast("Order image saved to Pictures/OrderIT Orders");
+            showToast("Order image saved to Pictures/Shop Orders");
         } catch (Exception error) {
             showToast("Could not save the order image. Check available storage.");
         }
@@ -371,7 +371,7 @@ public final class MainActivity extends Activity {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Images.Media.DISPLAY_NAME, image.filename);
         values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
-        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/OrderIT Orders");
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Shop Orders");
         values.put(MediaStore.Images.Media.IS_PENDING, 1);
         Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
         if (uri == null) throw new IllegalStateException("MediaStore could not create the image.");
@@ -395,7 +395,7 @@ public final class MainActivity extends Activity {
 
     @SuppressWarnings("deprecation")
     private void writeToPicturesDirectory(PendingImage image) throws Exception {
-        File directory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "OrderIT Orders");
+        File directory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Shop Orders");
         if (!directory.exists() && !directory.mkdirs()) throw new IllegalStateException("Could not create Pictures folder.");
         File outputFile = new File(directory, image.filename);
         try (FileOutputStream output = new FileOutputStream(outputFile)) {
