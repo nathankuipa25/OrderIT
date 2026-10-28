@@ -8,8 +8,8 @@ const read = (path) => readFile(new URL(path, root), "utf8");
 test("product detail GET is admin-only before reading private catalog details", async () => {
   const route = await read("app/api/products/[id]/route.ts");
   const getHandler = route
-    .split("export async function GET(")[1]
-    .split("export async function PATCH(")[0];
+    .split("async function GET(")[1]
+    .split("async function PATCH(")[0];
   assert.ok(getHandler, "GET handler exists");
   assert.match(getHandler, /evaluateAdminAccess\(session\)/);
   assert.ok(
@@ -21,7 +21,7 @@ test("product detail GET is admin-only before reading private catalog details", 
 
 test("product DELETE is admin-only and blocks products referenced by orders", async () => {
   const route = await read("app/api/products/[id]/route.ts");
-  const deleteHandler = route.split("export async function DELETE(")[1];
+  const deleteHandler = route.split("async function DELETE(")[1];
   assert.ok(deleteHandler, "DELETE handler exists");
   assert.match(deleteHandler, /evaluateAdminAccess\(session\)/);
   assert.match(deleteHandler, /evaluateProductDeletion\(product\)/);

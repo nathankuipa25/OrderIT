@@ -6,6 +6,9 @@ import {
   mergeServerOrders,
   recordKey,
   reviseAttentionOrder,
+  validateLegacySnapshot,
+  type LegacyImportIssue,
+  type LegacySnapshotInput,
   type OrderRecord,
   type OutboxRecord,
   type ProductRecord,
@@ -53,7 +56,20 @@ type StoreState = {
   outbox: Record<string, OutboxRecord[]>;
   context: NativeDeviceContext;
   migrationComplete: boolean;
+  migrationAcknowledged: boolean;
+  migrationIssues: LegacyImportIssue[];
+  migrationError: string | null;
 };
+
+export type LegacyMigrationState = {
+  shouldPrompt: boolean;
+  complete: boolean;
+  acknowledged: boolean;
+  issues: LegacyImportIssue[];
+  error: string | null;
+};
+
+export type LegacyImportResult = { shops: number; orders: number; queued: number; complete: boolean; issues: LegacyImportIssue[] };
 
 const emptyState = (): StoreState => ({
   accounts: {},
@@ -62,6 +78,9 @@ const emptyState = (): StoreState => ({
   outbox: {},
   context: { role: "SIGNED_OUT", userId: null, updatedAt: null },
   migrationComplete: false,
+  migrationAcknowledged: false,
+  migrationIssues: [],
+  migrationError: null,
 });
 
 let writeTail: Promise<unknown> = Promise.resolve();
@@ -80,6 +99,9 @@ async function readState(): Promise<StoreState> {
       outbox: saved.outbox || {},
       context: saved.context || emptyState().context,
       migrationComplete: saved.migrationComplete === true,
+      migrationAcknowledged: saved.migrationAcknowledged === true,
+      migrationIssues: Array.isArray(saved.migrationIssues) ? saved.migrationIssues : [],
+      migrationError: typeof saved.migrationError === "string" ? saved.migrationError : null,
     };
   } catch {
     throw new Error("Saved offline shop data could not be read. Keep the app installed and contact support before clearing app storage.");
@@ -106,78 +128,76 @@ function byNewest<T extends { createdAt: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
-export async function hasCompletedLegacyMigration(): Promise<boolean> {
-  return inspect((state) => state.migrationComplete);
+export async function getLegacyMigrationState(): Promise<LegacyMigrationState> {
+  return inspect((state) => ({
+    shouldPrompt: !state.migrationComplete && !state.migrationAcknowledged,
+    complete: state.migrationComplete,
+    acknowledged: state.migrationAcknowledged,
+    issues: state.migrationIssues.map((item) => ({ ...item })),
+    error: state.migrationError,
+  }));
 }
 
-export async function importLegacyIndexedDb(snapshot: {
-  accounts?: Array<Record<string, unknown>>;
-  products?: Array<Record<string, unknown>>;
-  orders?: Array<Record<string, unknown>>;
-  outbox?: Array<Record<string, unknown>>;
-  settings?: Array<Record<string, unknown>>;
-}): Promise<{ shops: number; orders: number; queued: number }> {
+export async function importLegacyIndexedDb(snapshot: LegacySnapshotInput): Promise<LegacyImportResult> {
+  const { records, issues } = validateLegacySnapshot(snapshot);
   return mutate((state) => {
-    if (state.migrationComplete) return { shops: 0, orders: 0, queued: 0 };
+    if (state.migrationComplete) return { shops: Object.keys(state.accounts).length, orders: 0, queued: 0, complete: true, issues: [] };
     let migratedOrders = 0;
     let migratedQueued = 0;
-    for (const row of snapshot.accounts || []) {
-      if (typeof row.shopId !== "string" || !row.shopId) continue;
+    for (const row of records.accounts) {
       const shopId = row.shopId;
-      if (!state.accounts[shopId] && row.initializedAt) {
-        state.accounts[shopId] = {
-          shopId,
-          name: typeof row.name === "string" ? row.name : "Shop",
-          role: "SHOP",
-          initializedAt: String(row.initializedAt),
-          lastSyncAt: typeof row.lastSyncAt === "string" ? row.lastSyncAt : String(row.initializedAt),
-        };
-      }
+      if (!state.accounts[shopId]) state.accounts[shopId] = row;
     }
-    for (const row of snapshot.products || []) {
-      if (typeof row.shopId !== "string" || typeof row.id !== "string" || typeof row.name !== "string") continue;
+    for (const row of records.products) {
       const shopId = row.shopId;
       const rows = state.products[shopId] || [];
       if (!rows.some((item) => item.id === row.id)) {
-        rows.push({ id: row.id, name: row.name, active: row.active === true, cachedAt: typeof row.cachedAt === "string" ? row.cachedAt : undefined });
+        rows.push({ id: row.id, name: row.name, active: row.active, ...(row.cachedAt ? { cachedAt: row.cachedAt } : {}) });
         state.products[shopId] = rows;
       }
     }
-    for (const row of snapshot.orders || []) {
-      if (typeof row.shopId !== "string" || typeof row.localId !== "string" || !Array.isArray(row.items)) continue;
+    for (const row of records.orders) {
       const shopId = row.shopId;
       const rows = state.orders[shopId] || [];
       if (!rows.some((item) => item.localId === row.localId)) {
-        rows.push(row as unknown as OrderRecord);
+        rows.push(row);
         state.orders[shopId] = rows;
         migratedOrders += 1;
       }
     }
-    for (const row of snapshot.outbox || []) {
-      if (typeof row.shopId !== "string" || typeof row.localId !== "string" || !Array.isArray(row.productIds)) continue;
+    for (const row of records.outbox) {
       const shopId = row.shopId;
       const rows = state.outbox[shopId] || [];
       if (!rows.some((item) => item.localId === row.localId)) {
-        rows.push(row as unknown as OutboxRecord);
+        rows.push(row);
         state.outbox[shopId] = rows;
         migratedQueued += 1;
       }
     }
-    const activeContext = (snapshot.settings || []).find((row) => row.key === "active-context");
-    if (activeContext && ["SHOP", "ADMIN", "SIGNED_OUT"].includes(String(activeContext.role))) {
+    const activeContext = records.settings.find((row) => row.key === "active-context");
+    if (activeContext) {
       state.context = {
-        role: activeContext.role as NativeDeviceContext["role"],
-        userId: typeof activeContext.userId === "string" ? activeContext.userId : null,
-        updatedAt: typeof activeContext.updatedAt === "string" ? activeContext.updatedAt : new Date().toISOString(),
+        role: activeContext.role,
+        userId: activeContext.userId,
+        updatedAt: activeContext.updatedAt,
       };
     }
-    state.migrationComplete = true;
-    return { shops: Object.keys(state.accounts).length, orders: migratedOrders, queued: migratedQueued };
+    state.migrationIssues = issues.map((item) => ({ ...item }));
+    state.migrationError = null;
+    state.migrationComplete = issues.length === 0;
+    state.migrationAcknowledged = false;
+    return { shops: Object.keys(state.accounts).length, orders: migratedOrders, queued: migratedQueued, complete: state.migrationComplete, issues: state.migrationIssues };
   });
 }
 
-export async function markLegacyMigrationComplete(): Promise<void> {
-  await mutate((state) => { state.migrationComplete = true; });
+export async function recordLegacyMigrationError(message: string | null): Promise<void> {
+  await mutate((state) => { state.migrationError = message; });
+}
+
+export async function acknowledgeLegacyMigration(): Promise<void> {
+  await mutate((state) => {
+    if (!state.migrationComplete) state.migrationAcknowledged = true;
+  });
 }
 
 export async function getDeviceContext(): Promise<NativeDeviceContext> {

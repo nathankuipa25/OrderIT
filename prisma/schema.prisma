@@ -22,6 +22,19 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   orders       Order[]
+  mobileSessions MobileSession[]
+}
+
+model MobileSession {
+  id        String    @id
+  userId    String
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
 }
 
 model Product {

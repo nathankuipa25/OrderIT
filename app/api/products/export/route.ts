@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { serializeProductCsv } from "@/lib/product-csv.mjs";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function GET() {
+export const GET = withPrivateApiHeaders(async function GET() {
   const session = await getSession();
   if (!session || session.role !== "ADMIN") {
     return NextResponse.json({ error: "Admins only." }, { status: 403 });
@@ -30,4 +31,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+})

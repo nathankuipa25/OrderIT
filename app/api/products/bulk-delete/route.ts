@@ -4,8 +4,9 @@ import { bulkDeleteProducts } from "@/lib/product-bulk-delete.mjs";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { evaluateAdminAccess } from "@/lib/order-business.mjs";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function DELETE(req: NextRequest) {
+export const DELETE = withPrivateApiHeaders(async function DELETE(req: NextRequest) {
   const session = await getSession();
   const access = evaluateAdminAccess(session);
   if (!access.allowed) {
@@ -65,4 +66,4 @@ export async function DELETE(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+})

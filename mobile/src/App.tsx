@@ -37,10 +37,12 @@ import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { captureRef } from "react-native-view-shot";
 import {
+  acknowledgeLegacyMigration,
   enqueueOrder,
+  getLegacyMigrationState,
   getShopData,
-  hasCompletedLegacyMigration,
   importLegacyIndexedDb,
+  recordLegacyMigrationError,
   reviseQueuedOrder,
   setDeviceContext,
   syncShop,
@@ -49,10 +51,10 @@ import {
   type SyncResult,
 } from "./nativeStore";
 import { getApiBaseUrl } from "./config";
-import { clearNativeSession, readNativeSession, saveNativeSession, type NativeSession } from "./session";
+import { clearNativeSession, readNativeSession, revokeNativeSession, saveNativeSession, type NativeSession } from "./session";
 import { saveOrderImage } from "./saveOrderImage";
 import { colors, radius } from "./theme";
-import type { OrderRecord } from "./offline-core.mjs";
+import type { LegacyImportIssue, OrderRecord } from "./offline-core.mjs";
 
 const LEGACY_EXPORT_HTML = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><script>
 (function(){
@@ -125,6 +127,7 @@ function AppRoot() {
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [migrationError, setMigrationError] = useState("");
+  const [migrationIssues, setMigrationIssues] = useState<LegacyImportIssue[]>([]);
   const [migrationRetryKey, setMigrationRetryKey] = useState(0);
   const migrationDone = useRef(false);
 
@@ -208,9 +211,11 @@ function AppRoot() {
       const cleanBase = base.replace(/\/+$/, "");
       apiRef.current = cleanBase;
       setApiBaseUrl(cleanBase);
-      const migrationDone = await hasCompletedLegacyMigration();
+      const migration = await getLegacyMigrationState();
       if (!alive) return;
-      if (!migrationDone) {
+      setMigrationIssues(migration.issues);
+      setMigrationError(migration.error || "");
+      if (migration.shouldPrompt) {
         setScreen("migration");
         return;
       }
@@ -244,6 +249,12 @@ function AppRoot() {
     if (migrationDone.current) return;
     migrationDone.current = true;
     const imported = await importLegacyIndexedDb(snapshot);
+    setMigrationIssues(imported.issues);
+    if (!imported.complete) {
+      migrationDone.current = false;
+      setMigrationError("");
+      return;
+    }
     const details = imported.queued > 0
       ? `Imported ${imported.queued} queued order${imported.queued === 1 ? "" : "s"}.`
       : imported.orders > 0
@@ -251,32 +262,43 @@ function AppRoot() {
         : "Your shop data is ready.";
     setMigrationError("");
     showToast(details, "success");
-    const saved = await readNativeSession();
-    if (!saved) {
-      setScreen("login");
-      return;
-    }
-    setSession(saved);
-    const local = await getShopData(saved.user.id);
-    setData(local);
-    setScreen(local.account?.initializedAt ? "home" : "firstSync");
-    const result = await syncForSession(saved, false);
-    if (result?.unauthorized) return;
-    const latest = await getShopData(saved.user.id).catch(() => local);
-    setData(latest);
-    setScreen(latest.account?.initializedAt ? "home" : "firstSync");
-  }, [showToast, syncForSession]);
+    await bootstrap();
+  }, [bootstrap, showToast]);
+
+  const retryLegacyMigration = useCallback(() => {
+    migrationDone.current = false;
+    setMigrationError("");
+    setMigrationIssues([]);
+    void recordLegacyMigrationError(null);
+    setMigrationRetryKey((value) => value + 1);
+    setScreen("migration");
+  }, []);
+
+  const continueAfterLegacyMigration = useCallback(async () => {
+    await acknowledgeLegacyMigration();
+    migrationDone.current = true;
+    await bootstrap();
+  }, [bootstrap]);
 
   const onMigrationMessage = useCallback((event: WebViewMessageEvent) => {
     let message: { type?: string; payload?: Record<string, Array<Record<string, unknown>>>; message?: string };
-    try { message = JSON.parse(event.nativeEvent.data); } catch { setMigrationError("The saved-order check returned an unreadable response."); return; }
+    try { message = JSON.parse(event.nativeEvent.data); } catch {
+      const error = "The saved-order check returned an unreadable response.";
+      setMigrationError(error);
+      void recordLegacyMigrationError(error);
+      return;
+    }
     if (message.type === "LEGACY_DATA" && message.payload) {
       void finishMigration(message.payload).catch(() => {
         migrationDone.current = false;
-        setMigrationError("The previous shop data could not be imported. Retry before continuing.");
+        const error = "The previous shop data could not be imported. Retry before continuing.";
+        setMigrationError(error);
+        void recordLegacyMigrationError(error);
       });
     } else if (message.type === "LEGACY_ERROR") {
-      setMigrationError(message.message || "Previous shop data could not be checked.");
+      const error = message.message || "Previous shop data could not be checked.";
+      setMigrationError(error);
+      void recordLegacyMigrationError(error);
     }
   }, [finishMigration]);
 
@@ -317,7 +339,7 @@ function AppRoot() {
   const signOut = useCallback(() => {
     Alert.alert(
       "Sign out of this shop?",
-      "Saved orders remain on this phone. Sign in online again to access or sync them.",
+      "Saved orders remain on this phone. Connect to the internet so this device’s session can be revoked securely.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -325,6 +347,17 @@ function AppRoot() {
           style: "destructive",
           onPress: () => {
             void (async () => {
+              const current = sessionRef.current;
+              if (!current) return;
+              try {
+                await revokeNativeSession(current.token, apiRef.current);
+              } catch {
+                Alert.alert(
+                  "Connection required",
+                  "The shop service could not revoke this device’s session. Nothing was cleared; reconnect and try signing out again."
+                );
+                return;
+              }
               await clearNativeSession();
               await setDeviceContext("SIGNED_OUT");
               setSession(null);
@@ -422,19 +455,41 @@ function AppRoot() {
   }
 
   if (screen === "migration") {
+    const issueStores = [...new Set(migrationIssues.map((item) => item.store))].join(", ");
+    const hasMigrationProblem = migrationIssues.length > 0 || Boolean(migrationError);
     return (
       <SafeAreaView style={styles.migrationScreen} edges={["top", "bottom", "left", "right"]}>
         <StatusBar backgroundColor={colors.navyDeep} barStyle="light-content" />
         <View style={styles.migrationContent}>
           <AppIconBadge icon={ShoppingBag} size={58} />
-          <Text style={styles.migrationTitle}>{migrationError ? "Checking saved orders" : "Preparing your shop"}</Text>
+          <Text style={styles.migrationTitle}>{migrationIssues.length ? "Some saved rows need review" : migrationError ? "Saved-data import needs attention" : "Preparing your shop"}</Text>
           <Text style={styles.migrationCopy}>
-            {migrationError ? "The previous shop data could not be imported yet. Retry before using the new app so any saved orders stay available." : "Checking this phone for saved orders from the previous app version. This only runs once."}
+            {migrationIssues.length
+              ? `Found ${migrationIssues.length} saved-data issue${migrationIssues.length === 1 ? "" : "s"}${issueStores ? ` (${issueStores})` : ""}. Imported data is preserved, and the original is unchanged. Retry now or continue; you can retry later from Account.`
+              : migrationError
+                ? `${migrationError} The original saved data was not changed. Retry, or continue and retry later from Account.`
+                : "Checking this phone for saved orders from the previous app version. This only runs once."}
           </Text>
-          {migrationError ? (
-            <Pressable style={styles.primaryButton} onPress={() => { migrationDone.current = false; setMigrationError(""); setMigrationRetryKey((value) => value + 1); }} accessibilityRole="button">
-              <RefreshCw size={18} color={colors.white} /><Text style={styles.primaryButtonText}>Retry import</Text>
-            </Pressable>
+          {migrationIssues.length > 0 && (
+            <View style={styles.migrationIssueList} accessibilityRole="summary">
+              {migrationIssues.slice(0, 3).map((item, index) => (
+                <Text key={`${item.store}-${item.row}-${index}`} style={styles.migrationIssueText}>
+                  {item.row >= 0 ? `${item.store} row ${item.row + 1}` : item.store}: {item.reason}
+                </Text>
+              ))}
+              {migrationIssues.length > 3 && <Text style={styles.migrationIssueText}>And {migrationIssues.length - 3} more saved-data issues.</Text>}
+            </View>
+          )}
+          {hasMigrationProblem ? (
+            <View style={styles.migrationActions}>
+              <Pressable style={[styles.primaryButton, styles.migrationActionButton]} onPress={retryLegacyMigration} accessibilityRole="button">
+                <RefreshCw size={18} color={colors.white} /><Text style={styles.primaryButtonText}>Retry import</Text>
+              </Pressable>
+              <Pressable style={[styles.secondaryButton, styles.migrationActionButton]} onPress={() => void continueAfterLegacyMigration()} accessibilityRole="button">
+                <Text style={styles.secondaryButtonText}>{migrationIssues.length ? "Continue with imported data" : "Continue without old data"}</Text>
+                <ArrowRight size={17} color={colors.navy} />
+              </Pressable>
+            </View>
           ) : <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 12 }} />}
         </View>
         <View style={styles.hiddenWebView}>
@@ -445,7 +500,11 @@ function AppRoot() {
             domStorageEnabled
             originWhitelist={["https://*"]}
             onMessage={onMigrationMessage}
-            onError={() => setMigrationError("The previous shop data could not be checked. Retry before continuing.")}
+            onError={() => {
+              const error = "The previous shop data could not be checked. Retry before continuing.";
+              setMigrationError(error);
+              void recordLegacyMigrationError(error);
+            }}
           />
         </View>
       </SafeAreaView>
@@ -693,6 +752,16 @@ function AppRoot() {
               <AccountInfoRow label="Catalog items" value={String(data?.products.length || 0)} icon={Package} />
               <AccountInfoRow label="Saved orders" value={String(data?.orders.length || 0)} icon={ShoppingBag} last />
             </View>
+            {(migrationIssues.length > 0 || !!migrationError) && (
+              <Pressable onPress={retryLegacyMigration} style={styles.accountAction} accessibilityRole="button" accessibilityLabel="Retry previous shop data import">
+                <View style={[styles.accountActionIcon, { backgroundColor: colors.amberSoft }]}><RefreshCw size={18} color={colors.amber} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.accountActionTitle}>Review old-data import</Text>
+                  <Text style={styles.accountActionCopy}>{migrationIssues.length ? `${migrationIssues.length} saved-data issue${migrationIssues.length === 1 ? "" : "s"} remain. Original data is unchanged.` : migrationError || "Previous saved data was not fully imported."}</Text>
+                </View>
+                <ChevronRight size={18} color={colors.subtle} />
+              </Pressable>
+            )}
             <Pressable onPress={manualSync} style={styles.accountAction} accessibilityRole="button">
               <View style={styles.accountActionIcon}><RefreshCw size={18} color={colors.navy} /></View>
               <View style={{ flex: 1 }}><Text style={styles.accountActionTitle}>Sync shop data</Text><Text style={styles.accountActionCopy}>Refresh catalog, history and queued orders</Text></View>
@@ -986,5 +1055,9 @@ const styles = StyleSheet.create({
   migrationContent: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 30 },
   migrationTitle: { color: colors.ink, fontSize: 22, fontWeight: "700", marginTop: 20, marginBottom: 7 },
   migrationCopy: { color: colors.muted, fontSize: 14, lineHeight: 21, textAlign: "center", marginBottom: 17 },
+  migrationIssueList: { alignSelf: "stretch", backgroundColor: colors.amberSoft, borderRadius: radius.md, padding: 10, gap: 4, marginBottom: 14 },
+  migrationIssueText: { color: colors.amber, fontSize: 11, lineHeight: 15 },
+  migrationActions: { width: "100%", gap: 10, marginTop: 4 },
+  migrationActionButton: { width: "100%" },
   hiddenWebView: { position: "absolute", left: 0, bottom: 0, width: 1, height: 1, opacity: 0 },
 });

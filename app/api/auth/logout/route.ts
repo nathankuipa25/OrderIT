@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function POST() {
+export const POST = withPrivateApiHeaders(async function POST() {
   const res = NextResponse.json({ ok: true });
   res.cookies.set({
     name: SESSION_COOKIE,
@@ -11,4 +12,4 @@ export async function POST() {
     maxAge: 0,
   });
   return res;
-}
+})

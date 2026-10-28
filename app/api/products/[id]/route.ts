@@ -6,8 +6,9 @@ import {
   evaluateAdminAccess,
   evaluateProductDeletion,
 } from "@/lib/order-business.mjs";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function GET(
+export const GET = withPrivateApiHeaders(async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -36,9 +37,9 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+})
 
-export async function PATCH(
+export const PATCH = withPrivateApiHeaders(async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -85,9 +86,9 @@ export async function PATCH(
       { status: 500 }
     );
   }
-}
+})
 
-export async function DELETE(
+export const DELETE = withPrivateApiHeaders(async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -135,4 +136,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+})

@@ -54,7 +54,7 @@ You'll also need a `JWT_SECRET` env var (any long random string — `openssl ran
 
 This project uses Postgres via Prisma (tested with [Neon](https://neon.tech)). Set `DATABASE_URL` to your connection string, both locally (`.env`) and in Vercel's Environment Variables.
 
-**Before your first deploy actually works, someone needs to run `npx prisma db push` against that `DATABASE_URL` once** — this creates the `User`, `Product`, `Order`, and `OrderItem` tables. Vercel's build step does not do this automatically (it only runs `prisma generate`). A GitHub Action (`.github/workflows/prisma-db-push.yml`) handles this automatically on any push that changes `prisma/schema.prisma` — it runs `prisma db push` followed by the product-only seed script, using a `DATABASE_URL` repo secret (**Settings → Secrets and variables → Actions**). You can also trigger it manually from the Actions tab.
+**The database schema must be updated before the deployed app can use new auth features.** Vercel's build step only runs `prisma generate`; it does not change the database. The GitHub Action (`.github/workflows/prisma-db-push.yml`) applies the approved additive SQL migrations and then runs `prisma db push` when schema or migration files are pushed to `main` (or when manually dispatched), using the `DATABASE_URL` repository secret. The new `MobileSession` table is required for native token login and per-device revocation: until that schema update has run against the live database, the updated native login and protected API requests will fail closed, and secure sign-out cannot be confirmed.
 
 To run it yourself instead:
 

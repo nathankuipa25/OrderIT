@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { signMobileSession } from "@/lib/auth";
+import { MOBILE_SESSION_TTL_SECONDS, signMobileSession } from "@/lib/auth";
+import { withPrivateApiHeaders } from "@/lib/api-response";
 
-export async function POST(req: NextRequest) {
+export const POST = withPrivateApiHeaders(async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const username = String(body?.username || "").trim();
@@ -21,10 +23,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "This app is for shop accounts only." }, { status: 403 });
     }
 
-    const token = await signMobileSession({ sub: user.id, role: user.role, name: user.name });
+    const jti = randomUUID();
+    const expiresAt = new Date(Date.now() + MOBILE_SESSION_TTL_SECONDS * 1000);
+    const token = await signMobileSession({ sub: user.id, role: user.role, name: user.name }, jti);
+    await prisma.mobileSession.create({ data: { id: jti, userId: user.id, expiresAt } });
     const response = NextResponse.json({
       token,
-      expiresIn: 60 * 60 * 24 * 30,
+      expiresIn: MOBILE_SESSION_TTL_SECONDS,
       user: { id: user.id, name: user.name, role: user.role },
     });
     response.headers.set("Cache-Control", "no-store, max-age=0");
@@ -34,4 +39,4 @@ export async function POST(req: NextRequest) {
     console.error(error);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
-}
+})

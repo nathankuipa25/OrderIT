@@ -93,7 +93,7 @@ test("a protected product rejects the mixed selection without deleting any produ
 
 test("bulk-delete route authorizes before parsing and executes validation and deletion in a transaction", async () => {
   const route = await read("app/api/products/bulk-delete/route.ts");
-  const handler = route.split("export async function DELETE(")[1];
+  const handler = route.split("async function DELETE(")[1];
   assert.ok(handler, "DELETE handler exists");
   assert.ok(
     handler.indexOf("evaluateAdminAccess(session)") < handler.indexOf("req.json()"),
@@ -107,9 +107,9 @@ test("bulk-delete route authorizes before parsing and executes validation and de
 
 test("existing bulk products route remains dedicated to status updates", async () => {
   const route = await read("app/api/products/bulk/route.ts");
-  assert.match(route, /export async function PATCH/);
+  assert.match(route, /export const PATCH = withPrivateApiHeaders\(async function PATCH/);
   assert.match(route, /prisma\.product\.updateMany/);
-  assert.doesNotMatch(route, /export async function DELETE/);
+  assert.doesNotMatch(route, /export const DELETE = withPrivateApiHeaders/);
 });
 
 test("an invalid or missing product rejects the whole selection without deleting existing products", async () => {

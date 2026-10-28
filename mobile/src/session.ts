@@ -27,3 +27,13 @@ export async function saveNativeSession(session: NativeSession): Promise<void> {
 export async function clearNativeSession(): Promise<void> {
   await Keychain.resetGenericPassword({ service: SERVICE });
 }
+
+export async function revokeNativeSession(token: string, apiBaseUrl: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl.replace(/\/+$/, "")}/api/auth/mobile/logout`, {
+    method: "POST",
+    cache: "no-store",
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401) return; // Expired or already revoked; the token is no longer usable.
+  if (!response.ok) throw new Error("The shop service could not confirm secure sign-out.");
+}

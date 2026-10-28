@@ -34,6 +34,11 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      - name: Apply native session revocation migration
+        run: npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20261028231000_add_mobile_session_revocation/migration.sql
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Push schema to database
         run: npx prisma db push
         env:
