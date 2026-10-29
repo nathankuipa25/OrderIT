@@ -22,8 +22,8 @@ android {
         applicationId "com.orderit.shop"
         minSdk rootProject.ext.minSdkVersion
         targetSdk rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "2.0.0"
+        versionCode 3
+        versionName "2.0.1"
 
         def shopAppUrl = providers.gradleProperty("shopAppUrl")
             .orElse(providers.environmentVariable("ORDERIT_SHOP_APP_URL"))
