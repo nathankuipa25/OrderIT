@@ -127,8 +127,8 @@ const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
           style={{
             borderTop: "1px solid #e5e7eb",
             borderBottom: "1px solid #e5e7eb",
-            padding: "18px 0",
-            marginBottom: 20,
+            padding: "12px 0",
+            marginBottom: 14,
           }}
         >
           <div
@@ -137,7 +137,7 @@ const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
               fontWeight: 700,
               letterSpacing: 2,
               color: "#6b7280",
-              marginBottom: 12,
+              marginBottom: 7,
             }}
           >
             PRODUCTS
@@ -148,16 +148,16 @@ const OrderDocument = forwardRef<HTMLDivElement, OrderDocumentProps>(
               style={{
                 display: "flex",
                 alignItems: "baseline",
-                gap: 12,
-                padding: "7px 0",
-                fontSize: 15,
+                gap: 9,
+                padding: "3px 0",
+                fontSize: 14,
               }}
             >
               <span
                 style={{
                   color: "#9ca3af",
                   fontWeight: 600,
-                  fontSize: 13,
+                  fontSize: 12,
                   width: 22,
                   flexShrink: 0,
                 }}
