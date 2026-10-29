@@ -42,7 +42,7 @@ Local shop data is stored on the phone and is not encrypted by the app. Use a de
 
 ## Native order images
 
-Order cards can be rendered as PNG and saved into `Pictures/Shop Orders`. Android 10 and newer use MediaStore; older supported versions request storage permission when needed.
+Saved orders can be opened as full product-list previews without a network request. From a preview, the app exports every order item to numbered PNG pages, with at most 25 products per page and compact row spacing for WhatsApp sharing. Images are saved into `Pictures/Shop Orders`. Android 10 and newer use MediaStore; older supported versions request storage permission when needed.
 
 ## Validation and release readiness
 

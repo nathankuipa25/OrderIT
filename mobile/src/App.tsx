@@ -22,7 +22,6 @@ import {
   ChevronRight,
   Clock3,
   Home,
-  Image as ImageIcon,
   LogOut,
   Package,
   Plus,
@@ -35,7 +34,6 @@ import {
 } from "lucide-react-native";
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
-import { captureRef } from "react-native-view-shot";
 import {
   acknowledgeLegacyMigration,
   enqueueOrder,
@@ -52,7 +50,7 @@ import {
 } from "./nativeStore";
 import { getApiBaseUrl } from "./config";
 import { clearNativeSession, readNativeSession, revokeNativeSession, saveNativeSession, type NativeSession } from "./session";
-import { saveOrderImage } from "./saveOrderImage";
+import OrderPreview from "./OrderPreview";
 import { colors, radius } from "./theme";
 import type { LegacyImportIssue, OrderRecord } from "./offline-core.mjs";
 
@@ -92,7 +90,7 @@ const LEGACY_EXPORT_HTML = `<!doctype html><html><head><meta name="viewport" con
 })();
 </script></body></html>`;
 
-type Screen = "loading" | "migration" | "login" | "firstSync" | "home" | "orders" | "create" | "review" | "account";
+type Screen = "loading" | "migration" | "login" | "firstSync" | "home" | "orders" | "orderPreview" | "create" | "review" | "account";
 type ToastTone = "success" | "warning" | "neutral";
 type ToastState = { message: string; tone: ToastTone } | null;
 type AppIcon = typeof ShoppingBag;
@@ -123,6 +121,8 @@ function AppRoot() {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
+  const [previewLocalId, setPreviewLocalId] = useState<string | null>(null);
+  const [previewReturnTo, setPreviewReturnTo] = useState<"home" | "orders">("orders");
   const [savingOrder, setSavingOrder] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -364,6 +364,7 @@ function AppRoot() {
               setData(null);
               setSelectedIds(new Set());
               setEditingLocalId(null);
+              setPreviewLocalId(null);
               setScreen("login");
             })();
           },
@@ -374,6 +375,7 @@ function AppRoot() {
 
   const activeProducts = useMemo(() => (data?.products || []).filter((item) => item.active), [data]);
   const editingOrder = useMemo(() => data?.orders.find((item) => item.localId === editingLocalId) || null, [data, editingLocalId]);
+  const previewOrder = useMemo(() => data?.orders.find((item) => item.localId === previewLocalId) || null, [data, previewLocalId]);
   const visibleProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
     const existing = editingOrder?.items || [];
@@ -443,11 +445,17 @@ function AppRoot() {
     setScreen("create");
   }, []);
 
+  const openOrderPreview = useCallback((order: OrderRecord, returnTo: "home" | "orders" = "orders") => {
+    setPreviewLocalId(order.localId);
+    setPreviewReturnTo(returnTo);
+    setScreen("orderPreview");
+  }, []);
+
   const manualSync = useCallback(() => {
     if (session) void syncForSession(session, true);
   }, [session, syncForSession]);
 
-  const onImageSaved = useCallback((path: string) => showToast(`Saved to ${path}.`), [showToast]);
+  const onImageSaved = useCallback((message: string) => showToast(message), [showToast]);
   const onImageError = useCallback((message: string) => showToast(message, "warning"), [showToast]);
 
   if (screen === "loading") {
@@ -569,9 +577,9 @@ function AppRoot() {
   }
 
   const account = data?.account;
-  const screenTitle = screen === "home" ? account?.name || session?.user.name || "Shop" : screen === "orders" ? "Orders" : screen === "create" ? (editingLocalId ? "Review saved order" : "New order") : screen === "review" ? "Review order" : "Account";
-  const showBack = screen === "create" || screen === "review";
-  const currentTab = screen === "orders" ? "orders" : screen === "account" ? "account" : screen === "create" || screen === "review" ? "create" : "home";
+  const screenTitle = screen === "home" ? account?.name || session?.user.name || "Shop" : screen === "orders" ? "Orders" : screen === "orderPreview" ? "Order details" : screen === "create" ? (editingLocalId ? "Review saved order" : "New order") : screen === "review" ? "Review order" : "Account";
+  const showBack = screen === "create" || screen === "review" || screen === "orderPreview";
+  const currentTab = screen === "orders" || screen === "orderPreview" ? "orders" : screen === "account" ? "account" : screen === "create" || screen === "review" ? "create" : "home";
 
   return (
     <SafeAreaView style={styles.appRoot} edges={["top", "left", "right"]}>
@@ -579,7 +587,7 @@ function AppRoot() {
       <View style={styles.appBody}>
         <View style={styles.topBar}>
           {showBack ? (
-            <Pressable onPress={() => setScreen(screen === "review" ? "create" : editingLocalId ? "orders" : "home")} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
+            <Pressable onPress={() => setScreen(screen === "review" ? "create" : screen === "orderPreview" ? previewReturnTo : editingLocalId ? "orders" : "home")} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
               <ArrowLeft size={21} color={colors.navy} />
             </Pressable>
           ) : null}
@@ -625,7 +633,7 @@ function AppRoot() {
               </View>
             ) : (
               <View style={styles.orderList}>
-                {(data?.orders || []).slice(0, 3).map((order) => <MiniOrderRow key={order.localId} order={order} onPress={() => setScreen("orders")} />)}
+                {(data?.orders || []).slice(0, 3).map((order) => <MiniOrderRow key={order.localId} order={order} onPress={() => openOrderPreview(order, "home")} />)}
               </View>
             )}
 
@@ -651,11 +659,28 @@ function AppRoot() {
             ) : (
               <View style={styles.orderList}>
                 {(data?.orders || []).map((order) => (
-                  <OrderCard key={order.localId} order={order} shopName={account?.name || session?.user.name || "Shop"} onImageSaved={onImageSaved} onImageError={onImageError} onReview={() => reviewStaleOrder(order)} />
+                  <OrderCard key={order.localId} order={order} shopName={account?.name || session?.user.name || "Shop"} onPreview={() => openOrderPreview(order)} onReview={() => reviewStaleOrder(order)} />
                 ))}
               </View>
             )}
           </ScrollView>
+        )}
+
+        {screen === "orderPreview" && (
+          previewOrder ? (
+            <OrderPreview
+              order={previewOrder}
+              shopName={account?.name || session?.user.name || "Shop"}
+              onImageSaved={onImageSaved}
+              onImageError={onImageError}
+            />
+          ) : (
+            <View style={styles.emptyCard}>
+              <AppIconBadge icon={Package} tone="blue" />
+              <Text style={styles.emptyTitle}>Order not found on this phone</Text>
+              <Text style={styles.emptyDescription}>Saved orders stay available offline on the device where they were created.</Text>
+            </View>
+          )
         )}
 
         {screen === "create" && (
@@ -826,27 +851,12 @@ function MiniOrderRow({ order, onPress }: { order: OrderRecord; onPress: () => v
   );
 }
 
-function OrderCard({ order, shopName, onImageSaved, onImageError, onReview }: { order: OrderRecord; shopName: string; onImageSaved: (path: string) => void; onImageError: (message: string) => void; onReview: () => void }) {
-  const contentRef = useRef<View>(null);
-  const [savingImage, setSavingImage] = useState(false);
+function OrderCard({ order, shopName, onPreview, onReview }: { order: OrderRecord; shopName: string; onPreview: () => void; onReview: () => void }) {
   const status = statusDetails(order);
-  const saveImage = async () => {
-    if (!contentRef.current || savingImage) return;
-    setSavingImage(true);
-    try {
-      const uri = await captureRef(contentRef, { format: "png", quality: 1, result: "tmpfile" });
-      const path = await saveOrderImage(uri, `Order_${order.orderNumber || order.localId}`);
-      onImageSaved(path);
-    } catch (error) {
-      onImageError(error instanceof Error ? error.message : "Could not save the order image.");
-    } finally {
-      setSavingImage(false);
-    }
-  };
   const canReview = order.status === "needs_attention" && order.attentionCode === "stale_products";
   return (
     <View style={styles.orderCardShell}>
-      <View ref={contentRef} collapsable={false} style={styles.orderImageContent}>
+      <View style={styles.orderCardContent}>
         <View style={styles.orderCardTop}>
           <View style={{ flex: 1 }}>
             <Text style={styles.orderShopLabel} numberOfLines={1}>{shopName}</Text>
@@ -865,9 +875,8 @@ function OrderCard({ order, shopName, onImageSaved, onImageError, onReview }: { 
         {order.status === "needs_attention" && !!order.attentionReason && <Text style={styles.orderAttentionNote}>{order.attentionReason}</Text>}
       </View>
       <View style={styles.orderCardActions}>
-        <Pressable onPress={() => void saveImage()} style={styles.orderActionButton} disabled={savingImage} accessibilityRole="button">
-          {savingImage ? <ActivityIndicator size="small" color={colors.navy} /> : <ImageIcon size={16} color={colors.navy} />}
-          <Text style={styles.orderActionText}>{savingImage ? "Saving…" : "Save image"}</Text>
+        <Pressable onPress={onPreview} style={styles.orderActionButton} accessibilityRole="button">
+          <Text style={styles.orderActionText}>Preview full order</Text><ChevronRight size={16} color={colors.navy} />
         </Pressable>
         {canReview && <Pressable onPress={onReview} style={styles.reviewActionButton} accessibilityRole="button"><Text style={styles.reviewActionText}>Review products</Text><ArrowRight size={15} color={colors.amber} /></Pressable>}
       </View>
@@ -968,7 +977,7 @@ const styles = StyleSheet.create({
   ordersIntro: { paddingTop: 6, paddingBottom: 14 },
   ordersIntroCopy: { color: colors.muted, fontSize: 13, marginTop: 4 },
   orderCardShell: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
-  orderImageContent: { padding: 16, backgroundColor: colors.surface },
+  orderCardContent: { padding: 16, backgroundColor: colors.surface },
   orderCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   orderShopLabel: { color: colors.muted, fontSize: 11, fontWeight: "600", marginBottom: 4 },
   orderCardNumber: { color: colors.ink, fontSize: 16, fontWeight: "700", letterSpacing: -0.2 },
